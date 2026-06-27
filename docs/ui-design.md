@@ -136,7 +136,9 @@ Build under `frontend/src/components/`:
 | `CitationBlock` | Q&A source snippet |
 | `JobProgress` | SSE step + percent bar (square) |
 | `UploadZone` | dashed `4px` border, mono "DROP .TXT" |
-| `ChatThread` | persona chat messages |
+| `ChatThread` | persona chat messages (burst bubbles) |
+| `PersonaChatPanel` | chat input, PDF export, fullscreen |
+| `WorkspaceAnalyticsPanel` | overview rhythm stats + growth chart |
 | `AppShell` | sidebar + header layout |
 
 ### Button variants
@@ -175,6 +177,10 @@ Build under `frontend/src/components/`:
 - Stat row: messages, speakers, date range (mono numbers)
 - Top speakers list with links to people
 - Quick links: `ASK` / `PEOPLE` as brutal buttons
+- **Workspace analytics** panel (`WorkspaceAnalyticsPanel`):
+  - **Conversation rhythm** (1-on-1, ≤2 speakers) or **Group rhythm** (3+ speakers) — busiest hour/day, typical reply (median), messages per day
+  - **Conversation growth** chart with **W** / **M** toggle: weekly (last 52 weeks, capped at today) vs monthly (all time, aggregated)
+  - Hour×day heatmap, per-person reply histograms (`<1m` includes same-minute replies), pair connectivity table (group only)
 
 ### `/workspace/[id]/ask`
 
@@ -194,21 +200,27 @@ Build under `frontend/src/components/`:
 
 - Header: display name + status badge
 - Style stats row (avg length, emoji rate, hinglish ratio)
+- Build-time notes when present: personality, writing style, chat analysis (compact panels)
 - Sample messages list (scrollable, compact)
 - **Build persona** section:
   - Consent checkbox (required): "I have permission to mimic this person for personal use"
   - Train button disabled until consent + eligible
   - Warning banner if thin (50–199 msgs)
-  - `JobProgress` during train
-- **Chat** section below (only if `ready_model`): simple thread + input
+  - `JobProgress` during train (steps: samples → style → chat analysis → personality → writing style → activate)
+- **Chat** section below (only if `ready_model`):
+  - Thread with burst bubbles (`msgBreak` SSE events)
+  - Indicator when earlier turns are summarized
+  - **Download PDF** — exports session history
+  - **Fullscreen** overlay (Esc to exit)
+  - Rolling summarization when history &gt; 24 turns (keeps last 10 verbatim)
 
 ### `/settings`
 
 - Data root path (read-only display for MVP)
-- Ollama URL + model name
+- Embed model + device, vector store, Gemini model status
 - `Open data folder` button (if OS integration added later)
 - GPU status: available / busy / active job
-- Health indicators from `GET /health`
+- Health indicators from `GET /health` (`embedReady`, `geminiConfigured`)
 
 ---
 

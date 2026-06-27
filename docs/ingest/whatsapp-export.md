@@ -125,7 +125,7 @@ class Message:
 
 ---
 
-## Test fixtures (future)
+## Test fixtures
 
 ```
 backend/tests/fixtures/whatsapp/
@@ -136,7 +136,7 @@ backend/tests/fixtures/whatsapp/
   multiline_messages.txt
 ```
 
-`hinglish_sample.txt` should include code-mixed lines for embed QA tests.
+`hinglish_sample.txt` includes code-mixed lines for embed QA tests.
 
 ---
 
@@ -145,25 +145,25 @@ backend/tests/fixtures/whatsapp/
 **Android:**
 
 ```
-12/03/2024, 18:22 - Rahul: yaar kal meeting hai kya?
-12/03/2024, 18:23 - Priya: haan 5 baje
+12/03/2024, 18:22 - Alice: yaar kal meeting hai kya?
+12/03/2024, 18:23 - Bob: haan 5 baje
 ```
 
 **iOS:**
 
 ```
-[12/03/2024, 18:22:15] Rahul: yaar kal meeting hai kya?
-[12/03/2024, 18:23:01] Priya: haan 5 baje
+[12/03/2024, 18:22:15] Alice: yaar kal meeting hai kya?
+[12/03/2024, 18:23:01] Bob: haan 5 baje
 ```
 
 **Multiline:**
 
 ```
-12/03/2024, 18:24 - Rahul: location yeh hai
+12/03/2024, 18:24 - Alice: location yeh hai
 maps.google.com/...
 ```
 
-Second line attaches to Rahul's message.
+Second line attaches to Alice's message.
 
 ---
 

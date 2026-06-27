@@ -31,5 +31,6 @@ Start here after [CONTEXT.md](../CONTEXT.md) and [AGENTS.md](../AGENTS.md).
 1. Backend skeleton + `data/` paths + health route
 2. WhatsApp parser + ingest graph
 3. Q&A graph + ask UI
-4. Persona train graph + chat UI
-5. Settings + job SSE polish
+4. Persona train graph + chat UI (build-time analysis, burst SSE, summarization)
+5. Workspace analytics + overview panel
+6. Settings + job SSE polish

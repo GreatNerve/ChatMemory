@@ -34,7 +34,7 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 ## ADR-004: Persona via LoRA + Ollama
 
-**Status:** Accepted
+**Status:** Superseded by ADR-021
 
 **Decision:** Train QLoRA in Python; serve via `ollama create` per speaker. Not RAG-only style mimic.
 
@@ -52,7 +52,7 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 ## ADR-006: Ollama for inference, Python for training
 
-**Status:** Accepted
+**Status:** Superseded by ADR-021
 
 **Decision:** Q&A and persona chat use Ollama GPU. Embed and LoRA use Python/CUDA.
 
@@ -74,11 +74,11 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 ---
 
-## ADR-009: bge-m3 + Chroma
+## ADR-009: Local embeddings + Chroma
 
-**Status:** Accepted
+**Status:** Accepted (updated — model changed)
 
-**Decision:** `BAAI/bge-m3` embeddings on CUDA; Chroma persistent per workspace.
+**Decision:** Local sentence-transformers embeddings on CUDA; Chroma persistent per workspace. Current model: `intfloat/multilingual-e5-large` (supersedes early `BAAI/bge-m3` choice for Hinglish coverage).
 
 ---
 
@@ -98,7 +98,7 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 ---
 
-## ADR-012: LoRA training gates
+## ADR-012: Persona activation gates
 
 **Status:** Accepted
 
@@ -107,7 +107,7 @@ Architecture Decision Records from product grill. New decisions append at bottom
 | Block | &lt; 50 messages |
 | Warn + force | 50–199 |
 | Normal | ≥ 200 |
-| Train cap | 5000 messages sampled |
+| Sample cap | 60 messages for personality/style extraction; full corpus for chat analysis |
 | Consent | Required checkbox |
 
 ---
@@ -122,11 +122,11 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 ---
 
-## ADR-014: Hybrid retrieve + Ollama LLM rerank
+## ADR-014: Hybrid retrieve + LLM rerank
 
-**Status:** Accepted
+**Status:** Accepted (updated — reranker changed)
 
-**Decision:** Semantic (Chroma) + BM25 merge, then Ollama scores chunks. Rejected CPU cross-encoder for MVP.
+**Decision:** Semantic (Chroma) + BM25 merge, then Gemini scores chunks. Rejected CPU cross-encoder for MVP. (Originally Ollama; superseded in ADR-021.)
 
 ---
 
@@ -156,11 +156,11 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 ## ADR-018: GPU aggressive with mutex
 
-**Status:** Accepted
+**Status:** Accepted (updated — Ollama removed)
 
 **Context:** User wants maximum GPU use on RTX 3050 6GB.
 
-**Decision:** Embed on CUDA; Ollama on GPU; serialize heavy jobs via `gpu_lock`.
+**Decision:** Embed on CUDA; serialize heavy embed jobs via `gpu_lock`. LLM work is Gemini API (no local GPU).
 
 ---
 
@@ -190,11 +190,57 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 - Q&A rewrite, rerank, and answer via **Google Gemini** (`GEMINI_API_KEY` required)
 - Persona activation builds style profile + samples; chat uses Gemini
-- Embeddings stay local (`bge-m3` + sentence-transformers)
+- Embeddings stay local (`multilingual-e5-large` + sentence-transformers)
 - Vector store: **Chroma** per workspace via LangChain
 - WhatsApp ingest uses **preprocess** pipeline before parse
 
 **Consequences:** No Ollama or `uv sync --extra train` in default path. Legacy `data/.../lora/` folders may remain on disk but are unused.
+
+---
+
+## ADR-022: Build-time Gemini persona analysis
+
+**Status:** Accepted
+
+**Context:** Style profile + samples alone miss personality depth and typing habits. Unbounded chat history cannot fit in one prompt.
+
+**Decision:** At persona activation, run rate-limited Gemini extraction steps: `chatAnalysis` (chunked full corpus), `personalityNotes`, and `writingStyleNotes`. Store on person JSON. Non-fatal failures — activation completes with partial notes.
+
+**Consequences:** Build job takes longer and consumes Gemini quota. Recency-weighted sampling (60% from recent third) for personality/style calls.
+
+---
+
+## ADR-023: Turn-based analytics with median reply times
+
+**Status:** Accepted
+
+**Context:** Raw per-message gaps inflate reply counts when users send burst messages. Mean reply time is skewed by outliers.
+
+**Decision:** Merge consecutive same-sender messages into turns before measuring response gaps. Report **median** seconds as typical reply. Include 0s (same-minute) gaps in `<1m` bucket. Cache in `analytics.json` at ingest.
+
+**Consequences:** Overview UI shows "Conversation rhythm" (1-on-1) vs "Group rhythm" (3+ speakers) using `isGroup` (`speakerCount > 2`).
+
+---
+
+## ADR-024: Rolling persona chat summarization
+
+**Status:** Accepted
+
+**Context:** Long persona chats exceed practical history windows without blowing token budgets.
+
+**Decision:** When client history exceeds 24 turns, call `POST .../chat/summarize`, keep last 10 verbatim, pass `conversationSummary` on subsequent chat requests. Service uses up to 30 turns internally (20 if char budget exceeded).
+
+**Consequences:** Extra Gemini call on threshold crossing; `previousInteractionId` chain resets after summarize.
+
+---
+
+## ADR-025: Monorepo git at repo root
+
+**Status:** Accepted
+
+**Decision:** Single git repository at repo root (`backend/` + `frontend/` + `docs/`). Pre-commit at root (ruff on `backend/`). `.agents/` and `no-push/` gitignored.
+
+**Consequences:** Install hooks with `uv run pre-commit install -c ../.pre-commit-config.yaml` from `backend/`.
 
 ---
 

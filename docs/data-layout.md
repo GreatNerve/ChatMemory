@@ -17,10 +17,11 @@ data/
     └── {workspaceId}/
         ├── meta.json           # name, dates, counts, ingest status
         ├── export.txt          # raw WhatsApp upload (immutable source)
-        ├── chroma/               # Chroma persistent client path
-        ├── bm25/                 # keyword index artifacts
+        ├── analytics.json      # cached workspace analytics (recomputable)
+        ├── chroma/             # Chroma persistent client path
+        ├── bm25/               # keyword index artifacts
         └── people/
-            └── {personId}.json   # speaker profile + persona status
+            └── {personId}.json # speaker profile + persona status + LLM notes
 ```
 
 Legacy installs may still have `lora/{personId}/` from older LoRA training — **unused**, safe to delete manually.
@@ -32,7 +33,7 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
 ```json
 {
   "dataRoot": "./data",
-  "embedModel": "BAAI/bge-m3",
+  "embedModel": "intfloat/multilingual-e5-large",
   "personaMinMessages": 200,
   "personaThinMinMessages": 50
 }
@@ -45,7 +46,7 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
 ```json
 {
   "id": "uuid",
-  "name": "College Gang",
+  "name": "Test Group",
   "createdAt": "2026-06-24T10:00:00Z",
   "ingestStatus": "done",
   "ingestJobId": "uuid",
@@ -53,9 +54,11 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
   "speakerCount": 8,
   "dateFrom": "2023-01-01T00:00:00",
   "dateTo": "2026-06-01T23:59:00",
-  "exportFilename": "WhatsApp Chat with College Gang.txt"
+  "exportFilename": "WhatsApp Chat with Test Group.txt"
 }
 ```
+
+`isGroup` is **not** stored on disk — computed at API layer as `speakerCount > 2`.
 
 ---
 
@@ -65,13 +68,13 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
 {
   "id": "uuid",
   "workspaceId": "uuid",
-  "displayName": "Rahul",
-  "aliases": ["Rahul Bhai"],
+  "displayName": "Alice",
+  "aliases": [],
   "messageCount": 3200,
   "firstSeen": "2023-01-01T12:00:00",
   "lastSeen": "2026-06-01T18:00:00",
   "personaStatus": "ready_model",
-  "ollamaModelName": "gemini",
+  "ollamaModelName": "gemini-3.5-flash",
   "lastTrainJobId": "uuid",
   "lastTrainAt": "2026-06-24T11:00:00Z",
   "styleProfile": {
@@ -85,11 +88,29 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
       "timestamp": "2024-03-12T18:22:00",
       "text": "yaar kal meeting hai"
     }
-  ]
+  ],
+  "personalityNotes": "Alice tends to reply in short bursts...",
+  "writingStyleNotes": "Mostly lowercase, skips punctuation...",
+  "chatAnalysis": "Recurring topics include weekend plans..."
 }
 ```
 
-`sampleMessages`: auto-picked diverse short messages for UI preview and persona prompts.
+| Field | Set when |
+|-------|----------|
+| `sampleMessages` | Ingest + refreshed at persona build (recency-biased monthly spread) |
+| `personalityNotes` | Persona build — Gemini, recency-weighted sample (~60% from recent third) |
+| `writingStyleNotes` | Persona build — Gemini, same sampling |
+| `chatAnalysis` | Persona build — chunked Gemini analysis over full corpus |
+
+All three LLM fields may be absent (`null`) if build predates the feature or a non-fatal extraction step fails.
+
+---
+
+## `analytics.json`
+
+Cached output of `analytics.compute_analytics()`. Written at end of ingest; refreshed via `GET .../analytics?refresh=true`.
+
+Contains `computedAt`, `group` (rhythm stats, `weeklySeries`, `heatmap`, `strongestPair`), per-person stats, and pair connectivity. See [api.md](./api.md#get-workspace-analytics).
 
 ---
 

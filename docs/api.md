@@ -28,6 +28,7 @@ No authentication headers in MVP (local single-operator).
 | 404 | Workspace, person, or job not found |
 | 409 | GPU busy — another heavy job running |
 | 500 | Unexpected server error |
+| 503 | Gemini not configured |
 
 ### Job statuses (SSE + poll)
 
@@ -35,7 +36,7 @@ No authentication headers in MVP (local single-operator).
 
 Persona train substeps (in `message` or `step` field):
 
-`validating` → `refreshing_samples` → `style_profile` → `activating` → `done`
+`validating` → `refreshing_samples` → `style_profile` → `chat_analysis` → `personality` → `writing_style` → `activating` → `done`
 
 ### IDs
 
@@ -58,19 +59,22 @@ GET /workspaces
   "workspaces": [
     {
       "id": "uuid",
-      "name": "College Gang",
+      "name": "Test Group",
       "createdAt": "2026-06-24T10:00:00Z",
       "messageCount": 12450,
       "speakerCount": 8,
       "dateFrom": "2023-01-01",
       "dateTo": "2026-06-01",
-      "ingestStatus": "done"
+      "ingestStatus": "done",
+      "isGroup": true
     }
   ]
 }
 ```
 
 `ingestStatus`: `pending` | `running` | `done` | `error`
+
+`isGroup`: computed — `true` when `speakerCount > 2` (group chat); `false` for 1-on-1.
 
 ---
 
@@ -90,7 +94,7 @@ Content-Type: multipart/form-data
 
 ```json
 {
-  "workspace": { "id": "uuid", "name": "College Gang", "ingestStatus": "running" },
+  "workspace": { "id": "uuid", "name": "Test Group", "ingestStatus": "running" },
   "jobId": "uuid"
 }
 ```
@@ -110,18 +114,40 @@ GET /workspaces/{workspaceId}
 ```json
 {
   "id": "uuid",
-  "name": "College Gang",
+  "name": "Test Group",
   "createdAt": "2026-06-24T10:00:00Z",
   "messageCount": 12450,
   "speakerCount": 8,
   "dateFrom": "2023-01-01",
   "dateTo": "2026-06-01",
   "ingestStatus": "done",
+  "isGroup": true,
   "topSpeakers": [
-    { "personId": "uuid", "displayName": "Rahul", "messageCount": 3200 }
+    { "personId": "uuid", "displayName": "Alice", "messageCount": 3200 }
   ]
 }
 ```
+
+---
+
+### Get workspace analytics
+
+```
+GET /workspaces/{workspaceId}/analytics?refresh=false
+```
+
+| Query | Default | Meaning |
+|-------|---------|---------|
+| `refresh` | `false` | When `true`, recompute from `export.txt` and overwrite cache |
+
+**Response 200** — see [architecture.md](./architecture.md#workspace-analytics) for field semantics.
+
+Key points:
+
+- Per-person **typical reply time** uses **median** response seconds (turn-based; burst messages grouped).
+- Response-time histogram buckets: `<1m` (includes same-minute / 0s replies), `1–5m`, `5–30m`, `30m+`.
+- `group.weeklySeries` — all weeks, sorted ascending; UI shows last 52 weeks capped at today.
+- `group.heatmap` — hour×day message frequency (non-zero cells only).
 
 ---
 
@@ -152,7 +178,7 @@ GET /workspaces/{workspaceId}/people
   "people": [
     {
       "id": "uuid",
-      "displayName": "Rahul",
+      "displayName": "Alice",
       "messageCount": 3200,
       "firstSeen": "2023-01-01",
       "lastSeen": "2026-06-01",
@@ -170,7 +196,7 @@ GET /workspaces/{workspaceId}/people
 | `thin` | 50–199 messages (train with warning) |
 | `ready` | ≥ 200 messages, no model yet |
 | `training` | Job in progress |
-| `ready_model` | Gemini persona active (`ollamaModelName`: `"gemini"`) |
+| `ready_model` | Gemini persona active |
 | `error` | Last train failed |
 
 ---
@@ -186,10 +212,10 @@ GET /workspaces/{workspaceId}/people/{personId}
 ```json
 {
   "id": "uuid",
-  "displayName": "Rahul",
+  "displayName": "Alice",
   "messageCount": 3200,
-  "personaStatus": "ready",
-  "ollamaModelName": null,
+  "personaStatus": "ready_model",
+  "ollamaModelName": "gemini-3.5-flash",
   "styleProfile": {
     "avgMessageLength": 42,
     "emojiRate": 0.12,
@@ -198,10 +224,16 @@ GET /workspaces/{workspaceId}/people/{personId}
   "sampleMessages": [
     { "timestamp": "2024-03-12T18:22:00", "text": "yaar kal meeting hai" }
   ],
+  "personalityNotes": "Alice tends to reply in short bursts...",
+  "writingStyleNotes": "Mostly lowercase, skips punctuation...",
+  "chatAnalysis": "Recurring topics include weekend plans...",
   "trainEligible": true,
-  "trainWarning": null
+  "trainWarning": null,
+  "lastTrainJobId": "uuid"
 }
 ```
+
+`personalityNotes`, `writingStyleNotes`, and `chatAnalysis` are populated at persona **build** time via Gemini. `null` for personas activated before this feature or when a non-fatal extraction step fails.
 
 ---
 
@@ -218,7 +250,7 @@ POST /workspaces/{workspaceId}/ask
 ```json
 {
   "question": "When did we plan the Goa trip?",
-  "speaker": "Rahul",
+  "speaker": "Alice",
   "dateFrom": "2024-01-01",
   "dateTo": null
 }
@@ -235,7 +267,7 @@ POST /workspaces/{workspaceId}/ask
   "citations": [
     {
       "messageId": "uuid",
-      "speaker": "Priya",
+      "speaker": "Bob",
       "timestamp": "2024-03-12T18:22:00",
       "snippet": "Goa trip final kar dete hain March end"
     }
@@ -253,7 +285,7 @@ POST /workspaces/{workspaceId}/ask
   "nearMisses": [
     {
       "messageId": "uuid",
-      "speaker": "Amit",
+      "speaker": "Bob",
       "timestamp": "2024-02-01T10:00:00",
       "snippet": "trip pe chalenge kahi",
       "score": 0.45
@@ -262,15 +294,15 @@ POST /workspaces/{workspaceId}/ask
 }
 ```
 
-**Response 409** if GPU mutex blocks (rare for Q&A — document if train holds lock).
+**Response 409** if GPU mutex blocks embed.
 
-Q&A uses Google Gemini for rewrite, rerank, and answer (`GEMINI_API_KEY` required). Retrieval is local: bge-m3 embed, Chroma semantic search, BM25 keyword merge. Synchronous (no SSE).
+Q&A uses Google Gemini for rewrite, rerank, and answer (`GEMINI_API_KEY` required). Retrieval is local: `multilingual-e5-large` embed, Chroma semantic search, BM25 keyword merge. Synchronous (no SSE).
 
 ---
 
 ## Persona
 
-### Start persona training
+### Start persona training (activation)
 
 ```
 POST /workspaces/{workspaceId}/people/{personId}/train
@@ -281,7 +313,8 @@ POST /workspaces/{workspaceId}/people/{personId}/train
 ```json
 {
   "consent": true,
-  "forceThin": false
+  "forceThin": false,
+  "forceRetrain": false
 }
 ```
 
@@ -289,6 +322,7 @@ POST /workspaces/{workspaceId}/people/{personId}/train
 |-------|------|
 | `consent` | Must be `true` |
 | `forceThin` | Allow train when 50–199 messages (show warning in UI) |
+| `forceRetrain` | Rebuild when `personaStatus` is already `ready_model` |
 
 **Response 202**
 
@@ -299,11 +333,26 @@ POST /workspaces/{workspaceId}/people/{personId}/train
 }
 ```
 
-**Response 400** if &lt; 50 messages, consent false, or already training.
+**Response 400** if &lt; 50 messages, consent false, already training, or already active without `forceRetrain`.
+
+### Cancel persona training
+
+```
+POST /workspaces/{workspaceId}/people/{personId}/train/cancel
+```
+
+**Response 200**
+
+```json
+{
+  "personaStatus": "ready",
+  "message": "Build cancelled — you can activate again"
+}
+```
 
 ---
 
-### Persona chat
+### Persona chat (JSON)
 
 ```
 POST /workspaces/{workspaceId}/people/{personId}/chat
@@ -317,22 +366,86 @@ POST /workspaces/{workspaceId}/people/{personId}/chat
   "history": [
     { "role": "user", "content": "hello" },
     { "role": "assistant", "content": "bol bhai" }
-  ]
+  ],
+  "previousInteractionId": "interactions/abc123",
+  "conversationSummary": "Earlier they discussed weekend plans..."
 }
 ```
 
-`history` optional for multi-turn (last N turns).
+| Field | Rule |
+|-------|------|
+| `history` | Optional multi-turn; route passes last 10 turns to the service (service may use up to 30 internally) |
+| `previousInteractionId` | Gemini Interactions API chain ID from prior reply; skips RAG rebuild on follow-ups |
+| `conversationSummary` | Rolling summary of older turns (from `/chat/summarize`); injected into system prompt |
 
 **Response 200**
 
 ```json
 {
   "reply": "kuch nahi yaar, tu bata",
-  "model": "chatmemory-rahul-{workspaceId-short}"
+  "model": "gemini-3.5-flash",
+  "interactionId": "interactions/abc123"
 }
 ```
 
+Burst separators (`||`) in the model output are collapsed to spaces in this non-streaming endpoint.
+
 **Response 400** if `personaStatus` is not `ready_model`.
+
+---
+
+### Persona chat (SSE stream)
+
+```
+POST /workspaces/{workspaceId}/people/{personId}/chat/stream
+Content-Type: application/json
+Accept: text/event-stream
+```
+
+Same request body as `/chat`.
+
+**Events** (`data:` JSON per line)
+
+| Payload | Meaning |
+|---------|---------|
+| `{"status":"thinking"}` | Before Gemini call |
+| `{"token":"<text>"}` | Word-level token for current bubble |
+| `{"msgBreak":true}` | Commit bubble; start next (burst reply) |
+| `{"done":true,"interactionId":"..."}` | All bubbles complete |
+| `{"error":"<message>"}` | Failure |
+
+Optional **burst replies**: model may separate multiple WhatsApp-style messages with `||`. Not forced every reply.
+
+---
+
+### Summarize persona chat history
+
+```
+POST /workspaces/{workspaceId}/people/{personId}/chat/summarize
+```
+
+**Request**
+
+```json
+{
+  "history": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." }
+  ],
+  "keepRecent": 10
+}
+```
+
+`keepRecent` is accepted for API symmetry; the client trims history before calling. Used when local history exceeds **24 turns** — older turns are summarized, last 10 kept verbatim.
+
+**Response 200**
+
+```json
+{
+  "summary": "They discussed weekend plans and Alice seemed tired...",
+  "summarizedTurnCount": 14
+}
+```
 
 ---
 
@@ -355,7 +468,7 @@ event: done
 data: {"status":"done","result":{"workspaceId":"uuid"}}
 
 event: error
-data: {"status":"error","message":"CUDA OOM during training"}
+data: {"status":"error","message":"CUDA OOM during embedding"}
 ```
 
 ### Poll job (fallback)
@@ -381,14 +494,15 @@ GET /settings
 ```json
 {
   "dataRoot": "./data",
-  "embedModel": "BAAI/bge-m3",
+  "embedModel": "intfloat/multilingual-e5-large",
   "activeEmbedBackend": "local",
+  "embedDevice": "cuda:0",
   "vectorStore": "chroma",
   "gpuAvailable": true,
   "gpuBusy": false,
   "activeJobId": null,
   "geminiConfigured": true,
-  "geminiModel": "gemini-2.0-flash"
+  "geminiModel": "gemini-3.5-flash"
 }
 ```
 
@@ -423,7 +537,8 @@ GET /health
   "status": "ok",
   "dataRootWritable": true,
   "mlStackAvailable": true,
-  "geminiConfigured": true
+  "geminiConfigured": true,
+  "embedReady": true
 }
 ```
 

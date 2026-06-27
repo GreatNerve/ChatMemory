@@ -42,7 +42,7 @@ flowchart LR
 
 | Source | Top-K | Method |
 |--------|-------|--------|
-| Semantic | 20 | Chroma + bge-m3 query embedding |
+| Semantic | 20 | Chroma + `multilingual-e5-large` query embedding |
 | Keyword | 20 | BM25 on message text |
 
 Optional filters: `speaker`, `date_from`, `date_to`.

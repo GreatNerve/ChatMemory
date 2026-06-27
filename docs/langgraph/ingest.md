@@ -1,6 +1,6 @@
 # LangGraph — Ingest
 
-Parses WhatsApp export, extracts speakers, chunks messages, embeds with bge-m3, upserts Chroma.
+Parses WhatsApp export, extracts speakers, chunks messages, embeds with `multilingual-e5-large`, upserts Chroma, computes analytics.
 
 **Trigger:** `POST /workspaces` (multipart upload)  
 **Execution:** Background job + SSE  
@@ -33,7 +33,8 @@ flowchart LR
     B --> C[chunk_messages]
     C --> D[embed_and_upsert]
     D --> E[write_people_json]
-    E --> F[finalize_meta]
+    E --> F[save_analytics]
+    F --> G[finalize_meta]
 ```
 
 ---
@@ -55,7 +56,7 @@ flowchart LR
 - Assign stable `personId` UUID per unique speaker
 - Compute per-person: `messageCount`, `firstSeen`, `lastSeen`
 - Build initial `styleProfile` (avg length, emoji rate, hinglish heuristic)
-- Pick up to 10 `sampleMessages` (diverse lengths / dates)
+- Pick up to 20 `sampleMessages` (monthly recency spread + even fill)
 
 ### 3. `chunk_messages`
 
@@ -66,7 +67,7 @@ flowchart LR
 ### 4. `embed_and_upsert`
 
 - Acquire `gpu_lock`
-- Load `bge-m3` on CUDA
+- Load `intfloat/multilingual-e5-large` on CUDA (or CPU)
 - Batch embed (tune batch size for 6GB — start 32)
 - Upsert into Chroma collection `workspace_{id}`
 - Build BM25 index in parallel on CPU → save under `bm25/`
@@ -78,7 +79,12 @@ flowchart LR
 - Write `people/{personId}.json` for each speaker
 - Set `personaStatus`: `not_enough` / `thin` / `ready` based on message count
 
-### 6. `finalize_meta`
+### 6. `save_analytics`
+
+- Run `analytics.compute_analytics()` on parsed messages
+- Write `analytics.json` (turn-based reply stats, weekly series, heatmap)
+
+### 7. `finalize_meta`
 
 - Update `meta.json`: counts, date range, `ingestStatus: done`
 - Job → `done`
