@@ -185,7 +185,9 @@ def expand_to_turn_windows(
         mid = hit.get("message_id") or ""
 
         if mid not in id_to_idx:
-            fallback = f"{hit.get('speaker', '')} ({hit.get('timestamp', '')}): {hit.get('snippet', '')}"
+            fallback = (
+                f"{hit.get('speaker', '')} ({hit.get('timestamp', '')}): {hit.get('snippet', '')}"
+            )
             if fallback in result:
                 continue
             # Apply same inclusion logic to fallback snippets.

@@ -94,7 +94,17 @@ async def run_persona_train_job(
             # Non-fatal: persona still works without writing style notes.
             logger.warning("Writing style extraction failed (non-fatal): %s", exc)
 
-        progress(85, "activating", "Activating Gemini persona")
+        progress(80, "listening_style", "Extracting listening style")
+        try:
+            await asyncio.to_thread(
+                workspace_service.refresh_person_listening_style,
+                workspace_id,
+                person_id,
+            )
+        except Exception as exc:
+            logger.warning("Listening style extraction failed (non-fatal): %s", exc)
+
+        progress(88, "activating", "Activating Gemini persona")
         model_name = gemini_service.GEMINI_MODEL_TAG
 
         workspace_service.update_person_record(

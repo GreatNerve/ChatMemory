@@ -155,7 +155,7 @@ def classify_history_need(
 
     prompt = (
         "Decide if the latest user message needs factual recall from old WhatsApp chat history.\n"
-        "Return ONLY JSON: {\"needs_history\": boolean, \"search_query\": string}\n"
+        'Return ONLY JSON: {"needs_history": boolean, "search_query": string}\n'
         "- needs_history=true when they ask about past events, dates, plans, what was said, "
         "or references something from before this live chat.\n"
         "- needs_history=false for casual chat, reactions, opinions, or continuing the current topic.\n"

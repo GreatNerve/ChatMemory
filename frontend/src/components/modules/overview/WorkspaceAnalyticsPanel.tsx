@@ -18,8 +18,6 @@ import {
   WorkspaceAnalytics,
 } from "@/lib/api/types";
 
-// ─── Shared helpers ──────────────────────────────────────────────────────────
-
 function StatCell({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
@@ -52,8 +50,6 @@ function PanelTitle({ children }: { children: React.ReactNode }) {
     </p>
   );
 }
-
-// ─── Chat overview ───────────────────────────────────────────────────────────
 
 function ChatStats({ group, isGroup }: { group: GroupAnalytics; isGroup: boolean }) {
   const strongest = group.strongestPair;
@@ -97,8 +93,6 @@ function ChatStats({ group, isGroup }: { group: GroupAnalytics; isGroup: boolean
     </BrutalPanel>
   );
 }
-
-// ─── Conversation growth (new) ────────────────────────────────────────────────
 
 /** ISO week key for today, e.g. "2026-W26". */
 function currentWeekKey(): string {
@@ -166,12 +160,12 @@ type ViewMode = "week" | "month";
 function ConversationGrowth({ series }: { series: WeeklyPoint[] }) {
   const [view, setView] = useState<ViewMode>("week");
 
-  // ── Week mode: drop future weeks, keep last 52 ──────────────────────────
+  // Week mode: drop future weeks, keep last 52
   const cutoff = currentWeekKey();
   const upToToday = series.filter((w) => w.week <= cutoff);
   const weekSeries = upToToday.slice(-52);
 
-  // ── Month mode: aggregate all data up to today into calendar months ─────
+  // Month mode: aggregate all data up to today into calendar months
   const monthCutoff = currentMonthKey();
   // Filter future weekly points before aggregating so partial future months are excluded
   const monthSeries = aggregateToMonthly(upToToday).filter(
@@ -238,8 +232,6 @@ function ConversationGrowth({ series }: { series: WeeklyPoint[] }) {
   );
 }
 
-// ─── Activity heatmap (new) ───────────────────────────────────────────────────
-
 function ActivityHeatmap({ group }: { group: GroupAnalytics }) {
   return (
     <BrutalPanel>
@@ -248,8 +240,6 @@ function ActivityHeatmap({ group }: { group: GroupAnalytics }) {
     </BrutalPanel>
   );
 }
-
-// ─── Speaker share (new) ──────────────────────────────────────────────────────
 
 function SpeakerShare({ people }: { people: PersonAnalytics[] }) {
   return (
@@ -260,8 +250,6 @@ function SpeakerShare({ people }: { people: PersonAnalytics[] }) {
   );
 }
 
-// ─── Response time overview chart (new) ───────────────────────────────────────
-
 function ResponseTimeOverview({ people }: { people: PersonAnalytics[] }) {
   return (
     <BrutalPanel>
@@ -270,8 +258,6 @@ function ResponseTimeOverview({ people }: { people: PersonAnalytics[] }) {
     </BrutalPanel>
   );
 }
-
-// ─── Top active weeks (new) ───────────────────────────────────────────────────
 
 function TopActiveWeeks({ weeks }: { weeks: WeeklyPoint[] }) {
   if (!weeks.length) return null;
@@ -300,8 +286,6 @@ function TopActiveWeeks({ weeks }: { weeks: WeeklyPoint[] }) {
     </BrutalPanel>
   );
 }
-
-// ─── Per-person card ──────────────────────────────────────────────────────────
 
 function PersonCard({
   person,
@@ -383,8 +367,6 @@ function PersonCard({
   );
 }
 
-// ─── Pair connectivity table ──────────────────────────────────────────────────
-
 function PairsTable({
   pairs,
   workspaceId,
@@ -451,8 +433,6 @@ function PairsTable({
     </BrutalPanel>
   );
 }
-
-// ─── Root export ──────────────────────────────────────────────────────────────
 
 export function WorkspaceAnalyticsPanel({
   workspaceId,

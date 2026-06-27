@@ -20,7 +20,12 @@ from app.core.schemas import (
 from app.services import gemini as gemini_service
 from app.services import jobs as job_service
 from app.services.parser.preprocess import preprocess_whatsapp_export
-from app.services.parser.whatsapp import Message, is_noise_message, non_system_messages, parse_whatsapp_export
+from app.services.parser.whatsapp import (
+    Message,
+    is_noise_message,
+    non_system_messages,
+    parse_whatsapp_export,
+)
 from app.services.rate_limit import GeminiRateLimiter, estimate_tokens
 
 logger = logging.getLogger("chatmemory.workspace")
@@ -459,6 +464,7 @@ def get_person(workspace_id: str, person_id: str) -> PersonDetail:
         personality_notes=pdata.get("personalityNotes"),
         writing_style_notes=pdata.get("writingStyleNotes"),
         chat_analysis=pdata.get("chatAnalysis"),
+        active_listening_style=pdata.get("activeListeningStyle"),
     )
 
 
@@ -518,9 +524,7 @@ def refresh_person_personality(workspace_id: str, person_id: str) -> None:
     candidate_msgs = [
         m
         for m in timeline
-        if m.sender == person.display_name
-        and m.text.strip()
-        and not is_noise_message(m)
+        if m.sender == person.display_name and m.text.strip() and not is_noise_message(m)
     ]
 
     if not candidate_msgs:
@@ -576,9 +580,7 @@ def refresh_person_writing_style(workspace_id: str, person_id: str) -> None:
     candidate_msgs = [
         m
         for m in timeline
-        if m.sender == person.display_name
-        and m.text.strip()
-        and not is_noise_message(m)
+        if m.sender == person.display_name and m.text.strip() and not is_noise_message(m)
     ]
 
     if not candidate_msgs:
@@ -616,8 +618,6 @@ def refresh_person_writing_style(workspace_id: str, person_id: str) -> None:
         update_person_record(workspace_id, person_id, {"writingStyleNotes": notes})
 
 
-# ── Deep chat analysis ────────────────────────────────────────────────────────
-
 # Chunk size for deep analysis: up to this many messages per Gemini call.
 _CHAT_ANALYSIS_CHUNK_SIZE = 200
 # Soft token ceiling per chunk; keeps prompts well under the rate limit.
@@ -642,9 +642,7 @@ def refresh_person_chat_analysis(workspace_id: str, person_id: str) -> None:
     candidate_msgs = [
         m
         for m in timeline
-        if m.sender == person.display_name
-        and m.text.strip()
-        and not is_noise_message(m)
+        if m.sender == person.display_name and m.text.strip() and not is_noise_message(m)
     ]
 
     if not candidate_msgs:
@@ -652,7 +650,6 @@ def refresh_person_chat_analysis(workspace_id: str, person_id: str) -> None:
 
     candidate_msgs.sort(key=lambda m: m.timestamp, reverse=True)
 
-    # ── Build token-bounded chunks ──────────────────────────────────────────
     chunks: list[list[Message]] = []
     current: list[Message] = []
     current_tokens = 0
@@ -682,7 +679,6 @@ def refresh_person_chat_analysis(workspace_id: str, person_id: str) -> None:
         person_id,
     )
 
-    # ── Per-chunk observation calls ─────────────────────────────────────────
     chunk_observations: list[str] = []
     for i, chunk in enumerate(chunks):
         messages_text = "\n".join(f"- {m.text}" for m in chunk)
@@ -717,7 +713,6 @@ def refresh_person_chat_analysis(workspace_id: str, person_id: str) -> None:
     if not chunk_observations:
         return
 
-    # ── Consolidation call ──────────────────────────────────────────────────
     combined_obs = "\n\n---\n\n".join(chunk_observations)
     consolidation_prompt = (
         f"You have structured observations about {person.display_name}'s WhatsApp messaging "
@@ -743,3 +738,65 @@ def refresh_person_chat_analysis(workspace_id: str, person_id: str) -> None:
 
     if analysis:
         update_person_record(workspace_id, person_id, {"chatAnalysis": analysis})
+
+
+# How many messages to sample for listening-style extraction (same as writing style).
+_LISTENING_STYLE_SAMPLE_LIMIT = 60
+
+
+def refresh_person_listening_style(workspace_id: str, person_id: str) -> None:
+    """Use Gemini to extract how this person listens and responds when others share problems or news.
+
+    Unlike personality or writing style, this captures the *reactive* behavioural pattern —
+    what they do when someone vents, shares news, or asks for support. The result is stored
+    as ``activeListeningStyle`` in the person's JSON record and injected into the system prompt
+    so the persona mirrors their actual listening habits in conversation.
+
+    Uses recency-weighted sampling (same strategy as writing style).
+    Skips gracefully if Gemini is not configured or there are no usable messages.
+    """
+    person = get_person(workspace_id, person_id)
+    timeline = load_export_timeline(workspace_id)
+
+    # Filter to this person's non-empty, non-media, non-deleted messages.
+    candidate_msgs = [
+        m
+        for m in timeline
+        if m.sender == person.display_name and m.text.strip() and not is_noise_message(m)
+    ]
+
+    if not candidate_msgs:
+        return
+
+    # Prefer recent messages — listening habits may shift over time.
+    sampled = _recency_weighted_sample(candidate_msgs, _LISTENING_STYLE_SAMPLE_LIMIT)
+
+    messages_text = "\n".join(f"- {m.text}" for m in sampled)
+
+    prompt = (
+        f"Analyse how {person.display_name} listens and responds when others share problems, "
+        f"emotions, news, or updates in this WhatsApp group.\n\n"
+        f"Focus on their SPECIFIC behavioral patterns — NOT generic empathy theory:\n"
+        f"- Do they ask follow-up questions? If so, what style? (sharp/curious/minimal/probing)\n"
+        f"- Do they validate feelings or jump straight to advice/action?\n"
+        f'- What filler or reaction words do they use? (e.g. "bhai sach mein?", "mkc", "arey", "bc yaar")\n'
+        f"- How quickly do they redirect vs sit with the topic?\n"
+        f"- Do they share their own experience in return, or stay focused on the other person?\n"
+        f"- Any recurring phrases when someone vents to them?\n\n"
+        f"Write 3-5 sentences. Be specific to this person's actual patterns. "
+        f'Do NOT use generic phrases like "they are empathetic" or "they are a good listener". '
+        f"Extract only what the messages actually show.\n\n"
+        f"Messages from {person.display_name}:\n{messages_text}"
+    )
+
+    # Low temperature for factual, grounded extraction.
+    # Rate-limit before the call; record after to stay under 14 RPM / 100k TPM.
+    _rate_limiter.acquire(estimate_tokens(prompt))
+    notes = gemini_service.chat(
+        [{"role": "user", "content": prompt}],
+        temperature=0.3,
+    ).strip()
+    _rate_limiter.record(estimate_tokens(prompt))
+
+    if notes:
+        update_person_record(workspace_id, person_id, {"activeListeningStyle": notes})

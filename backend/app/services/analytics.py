@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -13,22 +14,26 @@ from app.core.paths import workspace_path
 from app.services.parser.preprocess import preprocess_whatsapp_export
 from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
 
-# Reply if same thread turn within 2 hours
-RESPONSE_WINDOW_SEC = 2 * 60 * 60
-# New "conversation" if gap exceeds 30 minutes
-SESSION_GAP_SEC = 30 * 60
-# Messages shorter than this are excluded from avgMessageLength
-# (omit truly empty or near-empty entries that would pull the median down)
+# A new conversation *session* begins when consecutive turns are separated by
+# more than this many seconds.  Within a session, replies are "burst" replies.
+SESSION_GAP_SEC = 30 * 60  # 30 min
+
+# Pickup replies (first reply after a session break) are only included when
+# the gap is ≤ this cap.  Larger gaps mean the person was sleeping or offline
+# for the day — including those would skew the distribution badly.
+PICKUP_REPLY_CAP_SEC = 4 * 60 * 60  # 4 h
+
+# Minimum number of samples required to produce a meaningful median.
+# Fewer samples produce None so the UI shows "—" rather than a spurious value.
+MIN_RT_SAMPLES = 3
+
+# Messages shorter than this are excluded from avgMessageLength calculations.
 _MIN_LEN_FOR_AVG = 2
 
 _DAY_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-# Response-time histogram bins: (lo_sec, hi_sec, display_label)
-# Lower bound is inclusive, upper bound is exclusive (lo <= rt < hi).
-# WhatsApp exports are minute-precision, so the smallest measurable gap is
-# 0 s (same-minute reply). Those land in the "<1m" bucket, which is correct.
-# The next smallest possible gap is exactly 60 s (next-minute reply), which
-# intentionally falls in "1–5m" — 60 s == 1 m, not less than 1 m.
+# Response-time histogram bins: (lo_sec, hi_sec, display_label).
+# Lower bound inclusive, upper exclusive.
 _RT_BINS: list[tuple[float, float, str]] = [
     (0, 60, "<1m"),
     (60, 300, "1–5m"),
@@ -55,11 +60,30 @@ def _format_seconds(seconds: float | None) -> str | None:
     if seconds < 3600:
         mins = int(seconds // 60)
         secs = int(seconds % 60)
-        # Omit trailing "0s" for cleaner display (e.g. "1m" not "1m 0s")
         return f"{mins}m {secs}s" if secs else f"{mins}m"
     hours = int(seconds // 3600)
     mins = int((seconds % 3600) // 60)
     return f"{hours}h {mins}m" if mins else f"{hours}h"
+
+
+def _safe_median(values: list[float]) -> float | None:
+    """Return the median only when at least MIN_RT_SAMPLES exist, else None.
+
+    Prevents single-sample or two-sample medians from appearing as reliable
+    statistics in the UI.
+    """
+    if len(values) >= MIN_RT_SAMPLES:
+        return round(statistics.median(values), 1)
+    return None
+
+
+def _detect_mention(text: str, name: str) -> bool:
+    """Return True if *text* contains an @mention of *name* (case-insensitive).
+
+    Used in group chats to attribute a reply to the mentioned person even when
+    other speakers have sent messages in between.
+    """
+    return bool(re.search(r"@" + re.escape(name), text, re.I))
 
 
 def _load_sender_to_person(workspace_id: str) -> dict[str, dict[str, str]]:
@@ -105,6 +129,8 @@ class _Turn:
     sender: str
     first_ts: datetime
     msg_count: int = field(default=1)
+    # Concatenation of all messages in this turn — used for mention detection.
+    text: str = field(default="")
 
 
 def _group_into_turns(messages: list[Message]) -> list[_Turn]:
@@ -113,13 +139,16 @@ def _group_into_turns(messages: list[Message]) -> list[_Turn]:
     Why: WhatsApp users often send 2–3 short messages in a burst.
     Without this, each burst message looks like a separate reply event,
     making response-time stats falsely fast (e.g. 3-second "replies").
+    The *text* field accumulates all messages so that mention detection
+    in group chats can scan the full turn content.
     """
     turns: list[_Turn] = []
     for msg in messages:
         if turns and turns[-1].sender == msg.sender:
             turns[-1].msg_count += 1
+            turns[-1].text = turns[-1].text + " " + msg.text
         else:
-            turns.append(_Turn(sender=msg.sender, first_ts=msg.timestamp))
+            turns.append(_Turn(sender=msg.sender, first_ts=msg.timestamp, text=msg.text))
     return turns
 
 
@@ -153,24 +182,34 @@ def compute_analytics(
     day_counts: dict[int, int] = defaultdict(int)
     msg_lengths: dict[str, list[int]] = defaultdict(list)
     msg_counts: dict[str, int] = defaultdict(int)
-    response_times: dict[str, list[float]] = defaultdict(list)
     replies_given: dict[str, int] = defaultdict(int)
     replies_received: dict[str, int] = defaultdict(int)
     initiations: dict[str, int] = defaultdict(int)
 
-    pair_replies: dict[tuple[str, str], list[float]] = defaultdict(list)
-    pair_a_to_b: dict[tuple[str, str], int] = defaultdict(int)
-    all_response_times: list[float] = []
+    # pickup_times[sender] = first-reply-per-session gaps (session-crossing replies)
+    pickup_times: dict[str, list[float]] = defaultdict(list)
+    # burst_times[sender] = within-session cross-sender reply gaps (> 0 s)
+    burst_times: dict[str, list[float]] = defaultdict(list)
 
-    # New: weekly message counts and hour×day heatmap
+    # pair_pickup[(a, b)] = pickup reply gaps when b replied to a's session-end message
+    pair_pickup: dict[tuple[str, str], list[float]] = defaultdict(list)
+    # pair_burst[(a, b)] = burst reply gaps when b replied to a within a session
+    pair_burst: dict[tuple[str, str], list[float]] = defaultdict(list)
+    # pair_a_to_b counts all directional cross-sender events (pickup + burst)
+    pair_a_to_b: dict[tuple[str, str], int] = defaultdict(int)
+
+    # Group-level pickup times — used for group.avgResponseSeconds
+    all_pickup_times: list[float] = []
+
     week_counts: dict[str, int] = defaultdict(int)
     hour_day_grid: dict[tuple[int, int], int] = defaultdict(int)
 
-    # ── Pass 1: per-message stats (counts, lengths, activity patterns) ──────────
+    # Group chats (>2 unique senders) support @mention attribution.
+    is_group = len(sender_map) > 2
+
     for msg in usable:
         sender = msg.sender
         msg_counts[sender] += 1
-        # Only include messages with real content for length stats.
         if len(msg.text) >= _MIN_LEN_FOR_AVG:
             msg_lengths[sender].append(len(msg.text))
         hour_counts[msg.timestamp.hour] += 1
@@ -180,44 +219,86 @@ def compute_analytics(
         week_counts[week_key] += 1
         hour_day_grid[(msg.timestamp.hour, msg.timestamp.weekday())] += 1
 
-    # ── Pass 2: response-time stats computed on turns, not raw messages ──────
-    # Grouping consecutive same-sender messages into turns prevents burst
-    # messages (multiple short messages sent in a row) from inflating reply
-    # counts and making response times falsely fast.
+    # Each turn is either:
+    #   • initiation    — first turn ever, or first turn of a new session
+    #   • pickup reply  — first cross-sender reply after a session break
+    #                     (SESSION_GAP_SEC < gap ≤ PICKUP_REPLY_CAP_SEC)
+    #   • burst reply   — cross-sender reply within an active session (0 < gap ≤ SESSION_GAP_SEC)
+    #   • gap == 0      — same-minute WhatsApp precision; reply is counted but
+    #                     gap is excluded from timing lists (not a real duration)
+    #   • same sender   — continuation, ignored for reply stats
+    #
+    # For group chats, @mention in the replying turn overrides the default
+    # attribution (last speaker) so pair stats reflect directed replies.
     turns = _group_into_turns(usable)
     prev_turn: _Turn | None = None
+
     for turn in turns:
         sender = turn.sender
+
         if prev_turn is None:
             initiations[sender] += 1
-        else:
-            gap = (turn.first_ts - prev_turn.first_ts).total_seconds()
-            if gap > SESSION_GAP_SEC:
-                # Large gap → new conversation session; this turn is an initiation.
-                initiations[sender] += 1
-            elif 0 <= gap <= RESPONSE_WINDOW_SEC:
-                # Valid reply: includes same-minute replies (gap == 0) which are
-                # genuine quick responses — WhatsApp timestamps are minute-precision
-                # so 0 s means "both parties sent within the same minute".
-                # Negative gaps (timestamp parsing artefacts from D/M vs M/D
-                # ambiguity) are excluded by the >= 0 guard.
-                all_response_times.append(gap)
-                response_times[sender].append(gap)
+            prev_turn = turn
+            continue
+
+        gap = (turn.first_ts - prev_turn.first_ts).total_seconds()
+
+        if gap < 0:
+            # Timestamp artefact (D/M vs M/D ambiguity) — skip without recording.
+            prev_turn = turn
+            continue
+
+        if gap > SESSION_GAP_SEC:
+            initiations[sender] += 1
+
+            # Pickup reply: different sender comes back within the 4-hour cap.
+            # The gap here is the true "how long until they picked up the phone"
+            # stat — much more meaningful than rapid in-session exchanges.
+            if prev_turn.sender != sender and gap <= PICKUP_REPLY_CAP_SEC:
                 replies_given[sender] += 1
                 replies_received[prev_turn.sender] += 1
-                key = (prev_turn.sender, sender)
-                pair_replies[key].append(gap)
-                pair_a_to_b[key] += 1
+                pickup_times[sender].append(gap)
+                all_pickup_times.append(gap)
+
+                # In group chats, honour @mentions for directed attribution.
+                attr_target = prev_turn.sender
+                if is_group:
+                    for name in sender_map:
+                        if name != sender and _detect_mention(turn.text, name):
+                            attr_target = name
+                            break
+
+                pair_pickup[(attr_target, sender)].append(gap)
+                pair_a_to_b[(attr_target, sender)] += 1
+
+        else:
+            if prev_turn.sender != sender:
+                # Cross-sender reply (burst).  Always count the exchange; only
+                # record timing when gap > 0 to exclude same-minute artefacts.
+                replies_given[sender] += 1
+                replies_received[prev_turn.sender] += 1
+
+                if gap > 0:
+                    burst_times[sender].append(gap)
+
+                attr_target = prev_turn.sender
+                if is_group:
+                    for name in sender_map:
+                        if name != sender and _detect_mention(turn.text, name):
+                            attr_target = name
+                            break
+
+                pair_burst[(attr_target, sender)].append(gap)
+                pair_a_to_b[(attr_target, sender)] += 1
+
         prev_turn = turn
 
-    # Build weekly time series (sorted ascending by ISO week key)
     weekly_series: list[dict[str, Any]] = sorted(
         [{"week": k, "label": _week_label(k), "count": v} for k, v in week_counts.items()],
         key=lambda x: x["week"],
     )
     top_active_weeks = sorted(weekly_series, key=lambda x: x["count"], reverse=True)[:5]
 
-    # Build hour×day heatmap — only emit non-zero cells to keep payload small
     heatmap: list[dict[str, Any]] = [
         {"hour": h, "day": d, "count": hour_day_grid[(h, d)]}
         for d in range(7)
@@ -239,31 +320,47 @@ def compute_analytics(
     people_out: list[dict[str, Any]] = []
     for sender, count in sorted(msg_counts.items(), key=lambda x: x[1], reverse=True):
         person = sender_map[sender]
-        rts = response_times.get(sender, [])
-        person_hours = defaultdict(int)
-        person_days = defaultdict(int)
+
+        person_hours: dict[int, int] = defaultdict(int)
+        person_days: dict[int, int] = defaultdict(int)
         for m in usable:
             if m.sender != sender:
                 continue
             person_hours[m.timestamp.hour] += 1
             person_days[m.timestamp.weekday()] += 1
+
         peak_h = max(person_hours, key=person_hours.get) if person_hours else None
         lengths = msg_lengths[sender]
         median_len = round(statistics.median(lengths), 1) if lengths else 0
-        median_rt = round(statistics.median(rts), 1) if rts else None
+
+        # typicalPickupReply: median first-reply-per-session — the meaningful
+        # "how long until they respond" stat shown as "Typical reply" in the UI.
+        pickup_rt = _safe_median(pickup_times.get(sender, []))
+
+        # typicalBurstReply: median within-session reply speed — how fast they
+        # type back once the conversation is already active.
+        burst_rt = _safe_median([g for g in burst_times.get(sender, []) if g > 0])
+
+        # avgResponseSeconds / avgResponseLabel kept for backward compatibility.
+        # Now reflects the more meaningful pickup-reply median.
+        compat_rt = pickup_rt
+
         people_out.append(
             {
                 "personId": person["id"],
                 "displayName": person["displayName"],
                 "messageCount": count,
                 "sharePercent": round(100.0 * count / total, 1),
-                # Median is robust to one-off long messages that would pull mean up.
                 "avgMessageLength": median_len,
-                # Keep raw seconds for callers that want to do their own math.
-                "avgResponseSeconds": median_rt,
-                "medianResponseSeconds": median_rt,
-                # Label uses median so a single burst-ack doesn't look like sub-second reply.
-                "avgResponseLabel": _format_seconds(median_rt),
+                "avgResponseSeconds": compat_rt,
+                "medianResponseSeconds": compat_rt,
+                "avgResponseLabel": _format_seconds(compat_rt),
+                # typicalPickupReply: median gap until they reply after a break
+                "typicalPickupReply": pickup_rt,
+                "typicalPickupReplyLabel": _format_seconds(pickup_rt),
+                # typicalBurstReply: median gap during active back-and-forth
+                "typicalBurstReply": burst_rt,
+                "typicalBurstReplyLabel": _format_seconds(burst_rt),
                 "repliesGiven": replies_given.get(sender, 0),
                 "repliesReceived": replies_received.get(sender, 0),
                 "initiations": initiations.get(sender, 0),
@@ -271,28 +368,45 @@ def compute_analytics(
                 "peakHourLabel": _hour_label(peak_h) if peak_h is not None else None,
                 "activeHours": _top_buckets(dict(person_hours), hour_labels),
                 "activeDays": _top_buckets(dict(person_days), day_labels),
-                "responseTimeBuckets": _rt_buckets(rts),
+                # Histogram uses burst times — shows in-session reply speed distribution.
+                "responseTimeBuckets": _rt_buckets(
+                    [g for g in burst_times.get(sender, []) if g > 0]
+                ),
             }
         )
 
+    # Build the union of all speaker pairs that had at least one reply event.
+    all_pair_keys: set[tuple[str, str]] = set(pair_pickup.keys()) | set(pair_burst.keys())
     pairs_out: list[dict[str, Any]] = []
     seen_pairs: set[tuple[str, str]] = set()
-    for (a, b), deltas in pair_replies.items():
+
+    for a, b in all_pair_keys:
         pair_key = tuple(sorted((a, b)))
         if pair_key in seen_pairs:
             continue
         seen_pairs.add(pair_key)
         a_id, b_id = pair_key
+
         ab = pair_a_to_b.get((a_id, b_id), 0)
         ba = pair_a_to_b.get((b_id, a_id), 0)
         exchanges = ab + ba
-        combined = pair_replies.get((a_id, b_id), []) + pair_replies.get((b_id, a_id), [])
-        # Connection score based on turn count, not raw message count, to avoid
-        # burst-heavy senders inflating the score.
+
+        # Pickup reply times for this pair (both directions combined).
+        pair_pickup_combined = pair_pickup.get((a_id, b_id), []) + pair_pickup.get((b_id, a_id), [])
+        pickup_pair_rt = _safe_median(pair_pickup_combined)
+
+        # Burst reply times (for secondary stat / future use).
+        pair_burst_combined = [g for g in pair_burst.get((a_id, b_id), []) if g > 0] + [
+            g for g in pair_burst.get((b_id, a_id), []) if g > 0
+        ]
+        burst_pair_rt = _safe_median(pair_burst_combined)
+
+        # Connection score: fraction of turns that were mutual exchanges,
+        # based on turn count not raw messages to avoid burst-sender inflation.
         na = sum(1 for t in turns if t.sender == a_id)
         nb = sum(1 for t in turns if t.sender == b_id)
         connection = min(100.0, round(100.0 * exchanges / max(1, (na + nb) / 2), 1))
-        median_pair_rt = round(statistics.median(combined), 1) if combined else None
+
         pairs_out.append(
             {
                 "personAId": sender_map[a_id]["id"],
@@ -302,12 +416,21 @@ def compute_analytics(
                 "exchanges": exchanges,
                 "aToBReplies": ab,
                 "bToAReplies": ba,
-                "avgResponseSeconds": median_pair_rt,
-                "avgResponseLabel": _format_seconds(median_pair_rt),
+                # Backward-compat fields now use pickup reply timing.
+                "avgResponseSeconds": pickup_pair_rt,
+                "avgResponseLabel": _format_seconds(pickup_pair_rt),
+                # New fields.
+                "typicalPickupReply": pickup_pair_rt,
+                "typicalPickupReplyLabel": _format_seconds(pickup_pair_rt),
+                "typicalBurstReply": burst_pair_rt,
+                "typicalBurstReplyLabel": _format_seconds(burst_pair_rt),
                 "connectionScore": connection,
             }
         )
     pairs_out.sort(key=lambda p: p["connectionScore"], reverse=True)
+
+    # Group-level pickup median — shown as the workspace "Typical reply" stat.
+    group_pickup_rt = _safe_median(all_pickup_times)
 
     return {
         "computedAt": datetime.now(timezone.utc).isoformat(),
@@ -315,18 +438,13 @@ def compute_analytics(
             "busiestHour": busiest_hour,
             "busiestHourLabel": _hour_label(busiest_hour) if busiest_hour is not None else None,
             "busiestDay": _DAY_LABELS[busiest_day_idx] if busiest_day_idx is not None else None,
-            # Group-level response time: median across all turns, robust to burst outliers.
-            "avgResponseSeconds": round(statistics.median(all_response_times), 1)
-            if all_response_times
-            else None,
-            "avgResponseLabel": _format_seconds(
-                statistics.median(all_response_times) if all_response_times else None
-            ),
+            # Backward-compat group response time, now session-aware.
+            "avgResponseSeconds": group_pickup_rt,
+            "avgResponseLabel": _format_seconds(group_pickup_rt),
             "medianMessagesPerDay": round(total / span_days, 1),
             "activeHours": _top_buckets(dict(hour_counts), hour_labels, 5),
             "activeDays": _top_buckets(dict(day_counts), day_labels, 7),
             "strongestPair": pairs_out[0] if pairs_out else None,
-            # New: time-series and heatmap data
             "weeklySeries": weekly_series,
             "topActiveWeeks": top_active_weeks,
             "heatmap": heatmap,

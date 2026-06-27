@@ -24,8 +24,6 @@ interface PersonaChatPanelProps {
   hasConversationSummary?: boolean;
 }
 
-// ─── Bubble components ────────────────────────────────────────────────────────
-
 function UserBubble({ content }: { content: string }) {
   return (
     <div className="self-end max-w-[85%] border-2 border-[var(--cm-border)] bg-[var(--cm-surface-raised)] px-3 py-2">
@@ -71,8 +69,6 @@ function TypingIndicator({ displayName }: { displayName: string }) {
     </div>
   );
 }
-
-// ─── Message list ─────────────────────────────────────────────────────────────
 
 function ChatMessages({
   displayName,
@@ -132,8 +128,6 @@ function ChatMessages({
     </>
   );
 }
-
-// ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function PersonaChatPanel({
   workspaceName,

@@ -16,9 +16,7 @@ from app.services import retrieval as retrieval_service
 logger = logging.getLogger("chatmemory.persona_chat_graph")
 
 
-# ---------------------------------------------------------------------------
 # Graph 1: context routing + retrieval
-# ---------------------------------------------------------------------------
 
 
 class PersonaContextState(TypedDict, total=False):
@@ -171,9 +169,7 @@ def run_persona_context(
     return result
 
 
-# ---------------------------------------------------------------------------
 # Graph 2: generation + factual validation
-# ---------------------------------------------------------------------------
 
 _STRICT_RECALL_PREFIX = (
     "STRICT RECALL RULE: Your previous response contained invented facts not found in the chat history. "

@@ -81,8 +81,6 @@ def test_fixture_file_if_present():
         assert len(result.messages) >= 50
 
 
-# ── is_noise_message ──────────────────────────────────────────────────────────
-
 class TestIsNoiseMessage:
     def test_media_omitted(self):
         assert is_noise_message(_msg("<Media omitted>"))
@@ -123,8 +121,6 @@ class TestIsNoiseMessage:
         assert is_noise_message(_msg("  <Media omitted>  "))
         assert is_noise_message(_msg("  [message deleted]  "))
 
-
-# ── non_system_messages ───────────────────────────────────────────────────────
 
 class TestNonSystemMessages:
     def test_excludes_system_messages(self):

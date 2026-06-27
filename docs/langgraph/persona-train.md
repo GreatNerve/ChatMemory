@@ -31,8 +31,9 @@ flowchart LR
     C --> D[chat_analysis]
     D --> E[personality]
     E --> F[writing_style]
-    F --> G[activate_gemini]
-    G --> H[done]
+    F --> G[listening_style]
+    G --> H[activate_gemini]
+    H --> I[done]
 ```
 
 ### Steps (SSE `step` values)
@@ -45,18 +46,19 @@ flowchart LR
 | `chat_analysis` | 55 | Chunked Gemini analysis → `chatAnalysis` on person record |
 | `personality` | 65 | Gemini personality keynote → `personalityNotes` |
 | `writing_style` | 75 | Gemini typing-habit extract → `writingStyleNotes` |
-| `activating` | 85 | Set `personaStatus: ready_model`, store model tag |
+| `listening_style` | 80 | Gemini reactive-pattern extract → `activeListeningStyle` |
+| `activating` | 88 | Set `personaStatus: ready_model`, store model tag |
 | `done` | 100 | Persona ready for chat |
 
-`chat_analysis`, `personality`, and `writing_style` are **non-fatal** — failures log a warning and activation continues with whatever notes were produced.
+`chat_analysis`, `personality`, `writing_style`, and `listening_style` are **non-fatal** — failures log a warning and activation continues with whatever notes were produced.
 
 ### Rate limiting
 
-Build-time Gemini calls (`chat_analysis`, `personality`, `writing_style`, and multi-chunk consolidation) share `GeminiRateLimiter`: **14 RPM**, **100k TPM** sliding window (`services/rate_limit.py`).
+Build-time Gemini calls (`chat_analysis`, `personality`, `writing_style`, `listening_style`, and multi-chunk consolidation) share `GeminiRateLimiter`: **14 RPM**, **100k TPM** sliding window (`services/rate_limit.py`).
 
 ### Recency-weighted sampling
 
-Personality and writing-style extraction sample up to 60 messages with **60% of slots from the most recent third** of the corpus (`_recency_weighted_sample` in `workspace.py`). Chat analysis processes the full corpus in ~200-message chunks.
+Personality, writing-style, and listening-style extraction sample up to 60 messages with **60% of slots from the most recent third** of the corpus (`_recency_weighted_sample` in `workspace.py`). Chat analysis processes the full corpus in ~200-message chunks.
 
 ---
 
@@ -67,8 +69,9 @@ Personality and writing-style extraction sample up to 60 messages with **60% of 
 | `personalityNotes` | Who they are — communication style, humour, themes |
 | `writingStyleNotes` | How they type — casing, punctuation, abbreviations, emoji |
 | `chatAnalysis` | Deep patterns — vocabulary, topics, tone, dynamics |
+| `activeListeningStyle` | How they listen/react when others share problems or news |
 
-Injected into persona chat system prompt at runtime.
+All four fields are injected into the persona chat system prompt at runtime.
 
 ---
 

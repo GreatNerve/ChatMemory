@@ -173,9 +173,18 @@ export interface PersonAnalytics {
   messageCount: number;
   sharePercent: number;
   avgMessageLength: number;
+  /** @deprecated Use typicalPickupReply — now reflects session-aware pickup timing */
   avgResponseSeconds: number | null;
+  /** @deprecated Use typicalPickupReply */
   medianResponseSeconds: number | null;
+  /** @deprecated Use typicalPickupReplyLabel */
   avgResponseLabel: string | null;
+  /** Median first-reply time after a session break (the "how long to pick up the phone" stat) */
+  typicalPickupReply: number | null;
+  typicalPickupReplyLabel: string | null;
+  /** Median reply time during active back-and-forth within a session */
+  typicalBurstReply: number | null;
+  typicalBurstReplyLabel: string | null;
   repliesGiven: number;
   repliesReceived: number;
   initiations: number;
@@ -194,8 +203,16 @@ export interface PairAnalytics {
   exchanges: number;
   aToBReplies: number;
   bToAReplies: number;
+  /** @deprecated Use typicalPickupReply */
   avgResponseSeconds: number | null;
+  /** @deprecated Use typicalPickupReplyLabel */
   avgResponseLabel: string | null;
+  /** Median first-reply time after a session break for this pair */
+  typicalPickupReply: number | null;
+  typicalPickupReplyLabel: string | null;
+  /** Median within-session reply time for this pair */
+  typicalBurstReply: number | null;
+  typicalBurstReplyLabel: string | null;
   connectionScore: number;
 }
 

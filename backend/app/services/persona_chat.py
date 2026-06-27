@@ -42,15 +42,17 @@ _WORD_DELAY = 0.04
 def _persona_background(person: PersonDetail) -> str:
     """Build a compact background string from the persona's profile for the hallucination validator.
 
-    Combines personality_notes and chat_analysis so the validator knows which names,
-    people, and topics the persona legitimately knows — preventing false-positive flags
-    on facts baked into the persona's system prompt at activation time.
+    Combines personality_notes, chat_analysis, and active_listening_style so the validator
+    knows which names, people, and topics the persona legitimately knows — preventing
+    false-positive flags on facts baked into the persona's system prompt at activation time.
     """
     parts: list[str] = []
     if person.personality_notes:
         parts.append(f"Personality notes:\n{person.personality_notes}")
     if person.chat_analysis:
         parts.append(f"Chat analysis:\n{person.chat_analysis}")
+    if person.active_listening_style:
+        parts.append(f"Active listening style:\n{person.active_listening_style}")
     return "\n\n".join(parts)
 
 
@@ -147,6 +149,16 @@ def build_system_prompt(
             f"{person.writing_style_notes}\n\n"
         )
 
+    # Active listening style: how they react when others share problems, emotions, or news.
+    # Mirror this in how you respond when the user shares something emotional or personal.
+    listening_style_section = ""
+    if person.active_listening_style:
+        listening_style_section = (
+            f"How they listen and respond when others share problems or news "
+            f"(mirror this in how you react — this is their actual pattern):\n"
+            f"{person.active_listening_style}\n\n"
+        )
+
     # Deep chat-pattern analysis: vocabulary habits, recurring topics, emotional patterns,
     # relationship dynamics. Extracted from the full corpus via chunked analysis at build time.
     chat_analysis_section = ""
@@ -179,6 +191,7 @@ def build_system_prompt(
         f"- Hinglish ratio: ~{sp.hinglish_ratio:.0%}\n"
         f"- Emoji use: ~{sp.emoji_rate:.1f} per message\n\n"
         f"{writing_style_section}"
+        f"{listening_style_section}"
         f"=== THEIR REAL MESSAGES ===\n"
         f"Study these for vocabulary, rhythm, casing, punctuation, and energy. Reproduce the style exactly:\n"
         f"{solo_block}\n\n"

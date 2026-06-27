@@ -178,6 +178,9 @@ class PersonDetail(PersonSummary):
     # Deep multi-call analysis of messaging patterns: vocabulary, topics, emotional tone, dynamics.
     # Extracted from the full message corpus via chunked Gemini calls during persona build.
     chat_analysis: str | None = None
+    # Reactive behavioural pattern: how they listen/respond when others share problems or news.
+    # Extracted at build time from recency-weighted sample; injected into system prompt.
+    active_listening_style: str | None = None
 
 
 class Citation(ApiModel):

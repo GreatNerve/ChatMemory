@@ -36,6 +36,24 @@ def test_build_system_prompt_includes_memory_block():
     assert "Goa trip" in prompt
 
 
+def test_build_system_prompt_includes_active_listening_style():
+    """When active_listening_style is set, build_system_prompt includes it in the output."""
+    person = PersonDetail(
+        id="p1",
+        display_name="Rohan",
+        message_count=150,
+        style_profile=StyleProfile(),
+        active_listening_style=(
+            "Rohan typically responds to vents with a short 'bc yaar' and then pivots to "
+            "asking a sharp follow-up question. He rarely validates feelings outright — "
+            "he redirects quickly to solutions or dark humour."
+        ),
+    )
+    prompt = build_system_prompt(person, [], [])
+    assert "bc yaar" in prompt
+    assert "mirror this in how you react" in prompt
+
+
 def test_chat_messages_includes_conversation_summary(monkeypatch):
     person = PersonDetail(
         id="p1",

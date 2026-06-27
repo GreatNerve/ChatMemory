@@ -91,7 +91,8 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
   ],
   "personalityNotes": "Alice tends to reply in short bursts...",
   "writingStyleNotes": "Mostly lowercase, skips punctuation...",
-  "chatAnalysis": "Recurring topics include weekend plans..."
+  "chatAnalysis": "Recurring topics include weekend plans...",
+  "activeListeningStyle": "When others vent, Alice typically responds with a short reaction..."
 }
 ```
 
@@ -101,8 +102,9 @@ Legacy installs may still have `lora/{personId}/` from older LoRA training — *
 | `personalityNotes` | Persona build — Gemini, recency-weighted sample (~60% from recent third) |
 | `writingStyleNotes` | Persona build — Gemini, same sampling |
 | `chatAnalysis` | Persona build — chunked Gemini analysis over full corpus |
+| `activeListeningStyle` | Persona build — Gemini, recency-weighted sample (~80%, same as writing style) |
 
-All three LLM fields may be absent (`null`) if build predates the feature or a non-fatal extraction step fails.
+All four LLM fields may be absent (`null`) if build predates the feature or a non-fatal extraction step fails.
 
 ---
 
