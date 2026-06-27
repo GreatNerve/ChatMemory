@@ -3,25 +3,24 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
 from app.core.paths import ensure_data_dirs, person_path, workspace_path
 from app.core.schemas import (
+    PersonaStatus,
     PersonDetail,
     PersonSummary,
-    PersonaStatus,
     SampleMessage,
     StyleProfile,
     TopSpeaker,
     WorkspaceDetail,
     WorkspaceSummary,
 )
-from app.services import jobs as job_service
 from app.services import gemini as gemini_service
-from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
+from app.services import jobs as job_service
 from app.services.parser.preprocess import preprocess_whatsapp_export
+from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
 from app.services.rate_limit import GeminiRateLimiter, estimate_tokens
 
 logger = logging.getLogger("chatmemory.workspace")
@@ -199,7 +198,6 @@ def build_people_from_messages(
         person_id = str(uuid.uuid4())
         msgs.sort(key=lambda m: m.timestamp)
         texts = [m.text for m in msgs]
-        combined = "\n".join(texts)
         profile = StyleProfile(
             avg_message_length=sum(len(t) for t in texts) / max(len(texts), 1),
             emoji_rate=sum(_emoji_rate(t) for t in texts) / max(len(texts), 1),
@@ -316,9 +314,7 @@ def _pick_samples(msgs: list[Message], limit: int = 20) -> list[dict[str, str]]:
     ]
 
 
-def finalize_workspace_stats(
-    workspace_id: str, messages: list[Message], people_count: int
-) -> None:
+def finalize_workspace_stats(workspace_id: str, messages: list[Message], people_count: int) -> None:
     meta = _load_meta(workspace_id)
     usable = non_system_messages(messages)
     meta["messageCount"] = len(usable)
@@ -456,9 +452,7 @@ def get_person(workspace_id: str, person_id: str) -> PersonDetail:
         persona_status=pdata.get("personaStatus", "not_enough"),
         ollama_model_name=pdata.get("ollamaModelName"),
         style_profile=StyleProfile.model_validate(pdata.get("styleProfile", {})),
-        sample_messages=[
-            SampleMessage.model_validate(s) for s in pdata.get("sampleMessages", [])
-        ],
+        sample_messages=[SampleMessage.model_validate(s) for s in pdata.get("sampleMessages", [])],
         train_eligible=train_eligible,
         train_warning=warning,
         last_train_job_id=pdata.get("lastTrainJobId"),

@@ -5,9 +5,7 @@ from app.services.parser.whatsapp import parse_whatsapp_export
 
 
 def test_compute_analytics_on_fixture(tmp_path, monkeypatch):
-    fixture = (
-        Path(__file__).parent.parent / "fixtures" / "whatsapp" / "android_group.txt"
-    )
+    fixture = Path(__file__).parent.parent / "fixtures" / "whatsapp" / "android_group.txt"
     text = fixture.read_text(encoding="utf-8")
     ws_id = "test-ws"
     ws_dir = tmp_path / ws_id
@@ -19,9 +17,7 @@ def test_compute_analytics_on_fixture(tmp_path, monkeypatch):
             f'{{"id":"p{i}","displayName":"{sender}"}}', encoding="utf-8"
         )
     (ws_dir / "export.txt").write_text(text, encoding="utf-8")
-    monkeypatch.setattr(
-        "app.services.analytics.workspace_path", lambda _id: ws_dir
-    )
+    monkeypatch.setattr("app.services.analytics.workspace_path", lambda _id: ws_dir)
     data = compute_analytics(ws_id)
     assert len(data["people"]) >= 1
     assert "group" in data

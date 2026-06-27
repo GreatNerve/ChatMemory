@@ -5,7 +5,6 @@ from typing import AsyncIterator
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
-from app.core.gpu_lock import gpu_holder
 from app.core.schemas import JobSnapshot
 from app.services import jobs as job_service
 
@@ -30,7 +29,9 @@ async def _job_event_stream(job_id: str) -> AsyncIterator[dict]:
 
         payload = job.model_dump_json(by_alias=True)
         if payload != last_payload:
-            event = "done" if job.status == "done" else "error" if job.status == "error" else "progress"
+            event = (
+                "done" if job.status == "done" else "error" if job.status == "error" else "progress"
+            )
             yield {"event": event, "data": payload}
             last_payload = payload
 

@@ -19,3 +19,12 @@ repos:
         files: ^backend/
       - id: ruff-format
         files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest (backend unit)
+        entry: bash -c 'cd backend && uv run pytest tests/unit -q'
+        language: system
+        pass_filenames: false
+        files: ^backend/

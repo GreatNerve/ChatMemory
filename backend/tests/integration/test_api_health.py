@@ -1,15 +1,8 @@
 from fastapi.testclient import TestClient
 
-
-
 from app.main import app
 
-
-
 client = TestClient(app)
-
-
-
 
 
 def test_health():
@@ -29,9 +22,6 @@ def test_health():
     assert "dataRootWritable" in body
 
 
-
-
-
 def test_list_workspaces_empty():
 
     r = client.get("/api/v1/workspaces")
@@ -39,5 +29,3 @@ def test_list_workspaces_empty():
     assert r.status_code == 200
 
     assert r.json()["workspaces"] == [] or isinstance(r.json()["workspaces"], list)
-
-

@@ -3,8 +3,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.core.paths import person_path
 from app.core.config import get_settings
+from app.core.paths import person_path
 from app.core.schemas import (
     PersonaChatRequest,
     PersonaChatResponse,
@@ -29,7 +29,13 @@ async def train_persona(
     if not body.consent:
         raise HTTPException(
             status_code=400,
-            detail={"error": {"code": "VALIDATION_ERROR", "message": "Consent required", "fieldErrors": {"consent": "Required"}}},
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Consent required",
+                    "fieldErrors": {"consent": "Required"},
+                }
+            },
         )
 
     try:
@@ -55,10 +61,7 @@ async def train_persona(
             status_code=400,
             detail="Thin persona — set forceThin true to proceed",
         )
-    if (
-        person.persona_status == "ready_model"
-        and not body.force_retrain
-    ):
+    if person.persona_status == "ready_model" and not body.force_retrain:
         raise HTTPException(
             status_code=400,
             detail="Persona already active — set forceRetrain true to rebuild",

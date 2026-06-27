@@ -48,7 +48,9 @@ def _require_gemini_persona(person: PersonDetail) -> None:
         )
 
 
-def _person_only_texts(person: PersonDetail, rag: list[dict], limit: int = _SOLO_EXAMPLE_LIMIT) -> list[str]:
+def _person_only_texts(
+    person: PersonDetail, rag: list[dict], limit: int = _SOLO_EXAMPLE_LIMIT
+) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
     for sample in person.sample_messages:
@@ -166,7 +168,7 @@ def build_system_prompt(
         f"{convo_block}\n\n"
         f"=== REPLY RULES (follow every one) ===\n\n"
         f"LENGTH — vary dramatically:\n"
-        f"- A quick confirmation or reaction → 1–4 chars (\"Hn\", \"k\", \"Nope\", \"lol\")\n"
+        f'- A quick confirmation or reaction → 1–4 chars ("Hn", "k", "Nope", "lol")\n'
         f"- A simple answer → 5–15 chars\n"
         f"- An involved reply → 20–50 chars max\n"
         f"- Match the energy of what's being said. Short question → short reply. Don't pad.\n"
@@ -279,9 +281,7 @@ def _chat_messages(
 ) -> list[dict[str, str]]:
     # Follow-up turns already carry chat state server-side — skip heavy RAG + rebuild.
     skip_rag = bool(previous_interaction_id)
-    system, _, _, context_ms = _build_context(
-        workspace_id, person, user_message, skip_rag=skip_rag
-    )
+    system, _, _, context_ms = _build_context(workspace_id, person, user_message, skip_rag=skip_rag)
     logger.info(
         "Persona context built in %.0fms (rag=%s, workspace=%s person=%s)",
         context_ms,
@@ -301,16 +301,12 @@ def _chat_messages(
     n = len(history)
     if n > 6:
         system = (
-            system
-            + f"\n\nYou are {n} exchanges into this conversation. "
+            system + f"\n\nYou are {n} exchanges into this conversation. "
             "Do not repeat response patterns you've already used."
         )
 
     if conversation_summary:
-        system = (
-            system
-            + f"\n\nEarlier in this conversation (summarized):\n{conversation_summary}"
-        )
+        system = system + f"\n\nEarlier in this conversation (summarized):\n{conversation_summary}"
 
     turns: list[dict[str, str]] = [{"role": "system", "content": system}]
     for turn in recent:

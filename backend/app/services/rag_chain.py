@@ -50,8 +50,7 @@ def rerank_chunks(question: str, chunks: list[dict[str, Any]], top_k: int) -> li
         "Reply with ONLY a JSON array of objects. Each object must have numeric fields "
         '"id" (snippet number) and "score" (single number 0.0-1.0).\n'
         'Example: [{"id":1,"score":0.9},{"id":2,"score":0.1}]\n\n'
-        f"Question: {question}\n\n"
-        + "\n".join(numbered)
+        f"Question: {question}\n\n" + "\n".join(numbered)
     )
     raw = _llm_text([HumanMessage(content=prompt)], temperature=0)
     score_by_id = parse_rerank_scores(raw, len(chunks))
@@ -69,9 +68,7 @@ def rerank_chunks(question: str, chunks: list[dict[str, Any]], top_k: int) -> li
 
 
 def grounded_answer(question: str, chunks: list[dict[str, Any]]) -> str:
-    context = "\n\n".join(
-        f"- {c['speaker']} ({c['timestamp']}): {c['snippet']}" for c in chunks
-    )
+    context = "\n\n".join(f"- {c['speaker']} ({c['timestamp']}): {c['snippet']}" for c in chunks)
     system = SystemMessage(
         content=(
             "Answer ONLY using the provided chat messages. "

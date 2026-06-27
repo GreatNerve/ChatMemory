@@ -28,9 +28,7 @@ class ErrorResponse(ApiModel):
 JobStatus = Literal["queued", "running", "done", "error"]
 JobType = Literal["ingest", "persona_train"]
 IngestStatus = Literal["pending", "running", "done", "error"]
-PersonaStatus = Literal[
-    "not_enough", "thin", "ready", "training", "ready_model", "error"
-]
+PersonaStatus = Literal["not_enough", "thin", "ready", "training", "ready_model", "error"]
 
 
 class StyleProfile(ApiModel):
@@ -80,20 +78,23 @@ class ActivityBucket(ApiModel):
 
 class WeeklyPoint(ApiModel):
     """One data point in the conversation-growth time series."""
-    week: str   # ISO week key e.g. "2024-W03"
+
+    week: str  # ISO week key e.g. "2024-W03"
     label: str  # Short display label e.g. "Jan 15"
     count: int
 
 
 class HeatmapCell(ApiModel):
     """Non-zero cell in the hour×day message-frequency heatmap."""
+
     hour: int  # 0–23
-    day: int   # 0 Mon … 6 Sun
+    day: int  # 0 Mon … 6 Sun
     count: int
 
 
 class ResponseTimeBucket(ApiModel):
     """One bar in the per-person response-time histogram."""
+
     label: str  # e.g. "<1m", "1–5m"
     count: int
 

@@ -132,9 +132,7 @@ def test_chat_stream_yields_text_deltas(monkeypatch):
     mock_client.interactions.create.return_value = iter([event1, event2])
 
     with patch("app.services.gemini._genai_client", return_value=mock_client):
-        chunks = list(
-            gemini_service.chat_stream([{"role": "user", "content": "hi"}])
-        )
+        chunks = list(gemini_service.chat_stream([{"role": "user", "content": "hi"}]))
 
     assert chunks == ["hello ", "world"]
     assert mock_client.interactions.create.call_args.kwargs["stream"] is True

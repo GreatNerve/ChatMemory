@@ -65,8 +65,7 @@ class GeminiRateLimiter:
             elapsed = time.monotonic() - self._window_start
             sleep_secs = max(0.0, 60.25 - elapsed)  # 0.25 s grace buffer
             logger.info(
-                "GeminiRateLimiter sleeping %.1fs "
-                "(rpm=%d/%d, tpm=%d/%d, new_req_tokens=%d)",
+                "GeminiRateLimiter sleeping %.1fs (rpm=%d/%d, tpm=%d/%d, new_req_tokens=%d)",
                 sleep_secs,
                 self._req_count,
                 self._max_rpm,

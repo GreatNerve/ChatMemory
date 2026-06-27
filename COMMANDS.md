@@ -124,13 +124,15 @@ cd D:/@2026/RAG_TEST/frontend
 pnpm install
 ```
 
-### Pre-commit (format + lint)
+### Pre-commit (format, lint, unit tests)
 
 ```bash
 cd D:/@2026/RAG_TEST/backend && uv sync
 uv run pre-commit install -c ../.pre-commit-config.yaml
 uv run pre-commit run --all-files -c ../.pre-commit-config.yaml   # one-off check
 ```
+
+Hooks: trailing whitespace, EOF fixer, YAML/large-file checks, **ruff** + **ruff-format** on `backend/`, **pytest** on `backend/tests/unit` when backend files change.
 
 Frontend ESLint: `cd frontend && pnpm lint` (not in pre-commit; run manually or in CI).
 

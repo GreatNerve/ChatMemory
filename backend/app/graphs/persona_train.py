@@ -1,15 +1,14 @@
 import asyncio
 import logging
-
 from datetime import datetime, timezone
-
-logger = logging.getLogger("chatmemory.persona_train")
 
 from app.core.memory import release_all_memory
 from app.services import gemini as gemini_service
 from app.services import jobs as job_service
 from app.services import vector_index as vector_service
 from app.services import workspace as workspace_service
+
+logger = logging.getLogger("chatmemory.persona_train")
 
 
 async def run_persona_train_job(
@@ -22,8 +21,7 @@ async def run_persona_train_job(
     try:
         if not gemini_service.is_configured():
             raise gemini_service.GeminiNotConfiguredError(
-                gemini_service.config_status()[1]
-                or "GEMINI_API_KEY is not set in backend/.env"
+                gemini_service.config_status()[1] or "GEMINI_API_KEY is not set in backend/.env"
             )
 
         workspace_service.get_person(workspace_id, person_id)
@@ -118,9 +116,7 @@ async def run_persona_train_job(
             result={"ollamaModelName": model_name, "provider": "gemini"},
         )
     except Exception as exc:
-        workspace_service.update_person_record(
-            workspace_id, person_id, {"personaStatus": "error"}
-        )
+        workspace_service.update_person_record(workspace_id, person_id, {"personaStatus": "error"})
         job_service.update_job(job_id, status="error", error=str(exc), message=str(exc))
         raise
     finally:

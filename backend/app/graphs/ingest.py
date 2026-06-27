@@ -10,9 +10,9 @@ from app.services import analytics as analytics_service
 from app.services import embed as embed_service
 from app.services import jobs as job_service
 from app.services import vector_index as vector_service
-from app.services.parser.whatsapp import non_system_messages, parse_whatsapp_export
-from app.services.parser.preprocess import preprocess_whatsapp_export
 from app.services import workspace as workspace_service
+from app.services.parser.preprocess import preprocess_whatsapp_export
+from app.services.parser.whatsapp import non_system_messages, parse_whatsapp_export
 
 logger = logging.getLogger("chatmemory.ingest")
 
@@ -77,9 +77,7 @@ async def run_ingest_job(job_id: str, workspace_id: str, export_text: str) -> No
         )
 
         async def _embed_and_index() -> None:
-            job_service.update_job(
-                job_id, step="embedding", percent=30, message=embed_label
-            )
+            job_service.update_job(job_id, step="embedding", percent=30, message=embed_label)
             embeddings: list[list[float]] = []
             embed_t0 = time.perf_counter()
             for i in range(0, len(texts), batch):
@@ -87,9 +85,7 @@ async def run_ingest_job(job_id: str, workspace_id: str, export_text: str) -> No
                 batch_num = (i // batch) + 1
                 # Run blocking local embed off the event loop
                 # so /jobs polling and other API calls stay responsive.
-                vecs = await asyncio.to_thread(
-                    embed_service.embed_texts, chunk, batch
-                )
+                vecs = await asyncio.to_thread(embed_service.embed_texts, chunk, batch)
                 embeddings.extend(vecs)
                 pct = 30 + int(65 * batch_num / total_batches)
                 msg = f"{embed_label} - batch {batch_num}/{total_batches}"

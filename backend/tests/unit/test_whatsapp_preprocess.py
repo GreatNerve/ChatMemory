@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from app.services.parser.whatsapp import parse_whatsapp_export
 from app.services.parser.preprocess import (
     DELETED_PLACEHOLDER,
     preprocess_whatsapp_export,
 )
+from app.services.parser.whatsapp import parse_whatsapp_export
 
 # Snippets derived from no-push export patterns (not committed).
 _TEST_GROUP = "Test Group, Sample Workspace"

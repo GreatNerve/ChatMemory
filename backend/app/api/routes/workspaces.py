@@ -3,13 +3,13 @@ import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-logger = logging.getLogger("chatmemory.workspaces")
-
-from app.core.schemas import WorkspaceDetail, WorkspaceSummary, WorkspaceAnalytics
+from app.core.paths import workspace_path
+from app.core.schemas import WorkspaceAnalytics, WorkspaceDetail, WorkspaceSummary
 from app.services import analytics as analytics_service
 from app.services import jobs as job_service
 from app.services import workspace as workspace_service
-from app.core.paths import workspace_path
+
+logger = logging.getLogger("chatmemory.workspaces")
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 

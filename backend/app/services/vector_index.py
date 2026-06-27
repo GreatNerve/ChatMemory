@@ -7,12 +7,12 @@ import logging
 from functools import lru_cache
 from typing import Any
 
-logger = logging.getLogger("chatmemory.vector")
-
 from app.core.config import get_settings
 from app.core.paths import workspace_path
 from app.services.embed import _cosine_similarity, normalize_vector
 from app.services.parser.whatsapp import Message, non_system_messages
+
+logger = logging.getLogger("chatmemory.vector")
 
 
 @lru_cache
@@ -118,9 +118,7 @@ def upsert_messages(
 
     from app.services import chroma as chroma_service
 
-    return chroma_service.upsert_messages(
-        workspace_id, messages, embeddings, person_ids_by_sender
-    )
+    return chroma_service.upsert_messages(workspace_id, messages, embeddings, person_ids_by_sender)
 
 
 def semantic_search(

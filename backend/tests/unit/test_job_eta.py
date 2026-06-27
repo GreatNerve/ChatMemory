@@ -21,7 +21,7 @@ def test_estimate_eta_seconds_zero_at_complete():
 
 
 def test_training_step_skips_percent_based_eta():
-    from app.services.jobs import _read_raw, _write_raw, create_job, update_job, get_job
+    from app.services.jobs import _read_raw, _write_raw, create_job, get_job, update_job
 
     job = create_job("persona_train", workspace_id="ws", person_id="p")
     update_job(job.id, status="running", percent=40, step="training", message="Training")

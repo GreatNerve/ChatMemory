@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core.paths import workspace_path
-from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
 from app.services.parser.preprocess import preprocess_whatsapp_export
+from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
 
 # Reply if same thread turn within 2 hours
 RESPONSE_WINDOW_SEC = 2 * 60 * 60
@@ -91,7 +91,9 @@ def _week_label(week_key: str) -> str:
     return dt.strftime("%b %d")
 
 
-def _top_buckets(counts: dict[int, int], labels: dict[int, str], n: int = 3) -> list[dict[str, Any]]:
+def _top_buckets(
+    counts: dict[int, int], labels: dict[int, str], n: int = 3
+) -> list[dict[str, Any]]:
     ranked = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:n]
     return [{"key": k, "label": labels.get(k, str(k)), "count": c} for k, c in ranked]
 
@@ -99,6 +101,7 @@ def _top_buckets(counts: dict[int, int], labels: dict[int, str], n: int = 3) -> 
 @dataclass
 class _Turn:
     """One uninterrupted block of messages from the same sender."""
+
     sender: str
     first_ts: datetime
     msg_count: int = field(default=1)
@@ -209,10 +212,7 @@ def compute_analytics(
 
     # Build weekly time series (sorted ascending by ISO week key)
     weekly_series: list[dict[str, Any]] = sorted(
-        [
-            {"week": k, "label": _week_label(k), "count": v}
-            for k, v in week_counts.items()
-        ],
+        [{"week": k, "label": _week_label(k), "count": v} for k, v in week_counts.items()],
         key=lambda x: x["week"],
     )
     top_active_weeks = sorted(weekly_series, key=lambda x: x["count"], reverse=True)[:5]

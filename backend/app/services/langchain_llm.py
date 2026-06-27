@@ -59,8 +59,7 @@ class GeminiInteractionsChat(BaseChatModel):
 def get_chat_model(*, temperature: float = 0.3) -> BaseChatModel:
     if not gemini_service.is_configured():
         raise gemini_service.GeminiNotConfiguredError(
-            gemini_service.config_status()[1]
-            or "GEMINI_API_KEY is not set in backend/.env"
+            gemini_service.config_status()[1] or "GEMINI_API_KEY is not set in backend/.env"
         )
     return GeminiInteractionsChat(temperature=temperature)
 

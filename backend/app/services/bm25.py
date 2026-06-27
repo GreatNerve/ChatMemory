@@ -86,9 +86,7 @@ def load_index(workspace_id: str) -> Bm25Index | None:
     return Bm25Index(corpus)
 
 
-def hybrid_merge(
-    semantic: list[dict], keyword: list[dict], limit: int = 40
-) -> list[dict]:
+def hybrid_merge(semantic: list[dict], keyword: list[dict], limit: int = 40) -> list[dict]:
     by_id: dict[str, dict] = {}
     for item in semantic + keyword:
         mid = item["message_id"]
