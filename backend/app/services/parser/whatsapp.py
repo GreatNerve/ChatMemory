@@ -141,5 +141,39 @@ def parse_whatsapp_export(text: str) -> ParseResult:
     return ParseResult(messages=messages, format=fmt)
 
 
+# Noise bodies that carry no retrievable content: media placeholders, deleted-message
+# markers, and WhatsApp's attachment-omitted lines (after zero-width-char stripping).
+# Note: preprocessor converts "This message was deleted" → "[message deleted]" and
+# strips the leading U+200E from "‎image omitted" → "image omitted" etc.
+_NOISE_RE = re.compile(
+    r"^\s*(?:"
+    r"<Media omitted>"
+    r"|\[message deleted\]"
+    r"|This message was deleted\.?"
+    r"|message was deleted"
+    r"|(?:image|video|audio|document|sticker|GIF)\s+omitted"
+    r")\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_noise_message(msg: Message) -> bool:
+    """Return True for messages that carry no retrievable content.
+
+    Covers media placeholders, deleted-message markers, and WhatsApp's
+    attachment-omitted lines (image/video/audio/document/sticker/GIF omitted).
+    Blank/whitespace-only messages are also considered noise.
+    """
+    text = msg.text.strip()
+    if not text:
+        return True
+    return bool(_NOISE_RE.match(text))
+
+
 def non_system_messages(messages: list[Message]) -> list[Message]:
-    return [m for m in messages if not m.is_system and m.text.strip()]
+    """Return non-system messages that contain usable text content.
+
+    Excludes system events, blank messages, and noise placeholders such as
+    '<Media omitted>', '[message deleted]', and '*omitted' attachment lines.
+    """
+    return [m for m in messages if not m.is_system and not is_noise_message(m)]

@@ -20,7 +20,7 @@ from app.core.schemas import (
 from app.services import gemini as gemini_service
 from app.services import jobs as job_service
 from app.services.parser.preprocess import preprocess_whatsapp_export
-from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
+from app.services.parser.whatsapp import Message, is_noise_message, non_system_messages, parse_whatsapp_export
 from app.services.rate_limit import GeminiRateLimiter, estimate_tokens
 
 logger = logging.getLogger("chatmemory.workspace")
@@ -496,11 +496,10 @@ def update_person_record(workspace_id: str, person_id: str, updates: dict[str, A
     path.write_text(json.dumps(pdata, indent=2), encoding="utf-8")
 
 
-# Messages to exclude when building the personality sample (media/deleted noise).
-_PERSONALITY_SKIP_RE = re.compile(
-    r"<Media omitted>|This message was deleted|message was deleted",
-    re.IGNORECASE,
-)
+# Noise filtering for personality/style/analysis passes is handled by
+# is_noise_message() from the parser, which covers the full set of noise patterns.
+# load_export_timeline already returns a noise-free timeline via non_system_messages,
+# so these per-function filters are a belt-and-suspenders guard only.
 
 # How many of the person's messages to feed into personality extraction.
 _PERSONALITY_SAMPLE_LIMIT = 60
@@ -521,7 +520,7 @@ def refresh_person_personality(workspace_id: str, person_id: str) -> None:
         for m in timeline
         if m.sender == person.display_name
         and m.text.strip()
-        and not _PERSONALITY_SKIP_RE.search(m.text)
+        and not is_noise_message(m)
     ]
 
     if not candidate_msgs:
@@ -579,7 +578,7 @@ def refresh_person_writing_style(workspace_id: str, person_id: str) -> None:
         for m in timeline
         if m.sender == person.display_name
         and m.text.strip()
-        and not _PERSONALITY_SKIP_RE.search(m.text)
+        and not is_noise_message(m)
     ]
 
     if not candidate_msgs:
@@ -645,7 +644,7 @@ def refresh_person_chat_analysis(workspace_id: str, person_id: str) -> None:
         for m in timeline
         if m.sender == person.display_name
         and m.text.strip()
-        and not _PERSONALITY_SKIP_RE.search(m.text)
+        and not is_noise_message(m)
     ]
 
     if not candidate_msgs:

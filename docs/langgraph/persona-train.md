@@ -80,7 +80,7 @@ Injected into persona chat system prompt at runtime.
 | `POST .../chat/stream` | SSE with optional `||` burst bubbles |
 | `POST .../chat/summarize` | Rolling history compression when &gt; 24 turns |
 
-See [../api.md](../api.md#persona) for request fields (`conversationSummary`, `previousInteractionId`).
+Memory recall and validation run server-side via `persona_chat` LangGraph — see [persona-chat.md](./persona-chat.md). Request/response fields unchanged; see [../api.md](../api.md#persona-chat-json) for `conversationSummary`, `previousInteractionId`.
 
 `ollamaModelName` in person JSON stores the Gemini model tag (legacy field name; no Ollama involved).
 
@@ -107,4 +107,5 @@ See [../api.md](../api.md#persona) for request fields (`conversationSummary`, `p
 
 - [../data-layout.md](../data-layout.md) — people JSON
 - [../architecture.md](../architecture.md) — persona chat flow
+- [persona-chat.md](./persona-chat.md) — memory recall + generation graphs
 - [qa.md](./qa.md) — grounded Q&A (separate from persona chat)

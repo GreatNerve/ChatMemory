@@ -375,7 +375,7 @@ POST /workspaces/{workspaceId}/people/{personId}/chat
 | Field | Rule |
 |-------|------|
 | `history` | Optional multi-turn; route passes last 10 turns to the service (service may use up to 30 internally) |
-| `previousInteractionId` | Gemini Interactions API chain ID from prior reply; skips RAG rebuild on follow-ups |
+| `previousInteractionId` | Gemini Interactions API chain ID from prior reply; does **not** skip memory routing |
 | `conversationSummary` | Rolling summary of older turns (from `/chat/summarize`); injected into system prompt |
 
 **Response 200**

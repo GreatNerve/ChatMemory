@@ -9,17 +9,15 @@ from collections.abc import Iterator
 from functools import lru_cache
 
 from app.core.schemas import PersonDetail
-from app.services import embed as embed_service
+from app.graphs.persona_chat import run_persona_context, run_persona_generation
 from app.services import gemini as gemini_service
-from app.services import vector_index as vector_service
 from app.services import workspace as workspace_service
 from app.services.parser.whatsapp import Message
 from app.services.rate_limit import _rate_limiter, estimate_tokens
 
 logger = logging.getLogger("chatmemory.persona_chat")
 
-# Lighter retrieval + fewer snippets to keep prompts small and fast.
-_PERSONA_RAG_TOP_K = 3
+# Lighter retrieval is handled by graphs/persona_chat (two-stage router + fast retrieve).
 _SOLO_EXAMPLE_LIMIT = 8
 _CONVO_SNIPPET_LIMIT = 4
 _CONVO_WINDOW = 6
@@ -41,6 +39,21 @@ _BURST_PAUSE = 0.7
 _WORD_DELAY = 0.04
 
 
+def _persona_background(person: PersonDetail) -> str:
+    """Build a compact background string from the persona's profile for the hallucination validator.
+
+    Combines personality_notes and chat_analysis so the validator knows which names,
+    people, and topics the persona legitimately knows — preventing false-positive flags
+    on facts baked into the persona's system prompt at activation time.
+    """
+    parts: list[str] = []
+    if person.personality_notes:
+        parts.append(f"Personality notes:\n{person.personality_notes}")
+    if person.chat_analysis:
+        parts.append(f"Chat analysis:\n{person.chat_analysis}")
+    return "\n\n".join(parts)
+
+
 def _require_gemini_persona(person: PersonDetail) -> None:
     if not gemini_service.is_gemini_model_name(person.ollama_model_name):
         raise gemini_service.GeminiError(
@@ -48,18 +61,12 @@ def _require_gemini_persona(person: PersonDetail) -> None:
         )
 
 
-def _person_only_texts(
-    person: PersonDetail, rag: list[dict], limit: int = _SOLO_EXAMPLE_LIMIT
-) -> list[str]:
+def _solo_examples(person: PersonDetail, limit: int = _SOLO_EXAMPLE_LIMIT) -> list[str]:
+    """Style samples from activation — not query-time retrieval."""
     seen: set[str] = set()
     out: list[str] = []
     for sample in person.sample_messages:
         text = (sample.text or "").strip()
-        if text and text not in seen:
-            seen.add(text)
-            out.append(text)
-    for row in rag:
-        text = (row.get("snippet") or "").strip()
         if text and text not in seen:
             seen.add(text)
             out.append(text)
@@ -112,6 +119,7 @@ def build_system_prompt(
     person: PersonDetail,
     solo_examples: list[str],
     convo_snippets: list[str],
+    memory_blocks: list[str] | None = None,
 ) -> str:
     sp = person.style_profile
     avg_len = int(sp.avg_message_length)
@@ -148,6 +156,16 @@ def build_system_prompt(
             f"{person.chat_analysis}\n\n"
         )
 
+    memory_section = ""
+    if memory_blocks:
+        joined = "\n\n---\n".join(memory_blocks)
+        memory_section = (
+            f"=== RELEVANT PAST CHAT (real WhatsApp history) ===\n"
+            f"Use these excerpts for factual recall. Stay in character — weave facts naturally, "
+            f"do not sound like you are reading a log.\n"
+            f"{joined}\n\n"
+        )
+
     # Derived casing hint: if avg length is short, they're terse; mention it explicitly.
     terse_note = " Most of their messages are under 15 chars." if avg_len <= 15 else ""
 
@@ -166,6 +184,7 @@ def build_system_prompt(
         f"{solo_block}\n\n"
         f"=== REAL CONVERSATIONS (they are {person.display_name}) ===\n"
         f"{convo_block}\n\n"
+        f"{memory_section}"
         f"=== REPLY RULES (follow every one) ===\n\n"
         f"LENGTH — vary dramatically:\n"
         f'- A quick confirmation or reaction → 1–4 chars ("Hn", "k", "Nope", "lol")\n'
@@ -198,7 +217,12 @@ def build_system_prompt(
         f"- Conversations move forward — after 3–4 exchanges on the same point, change angle or close the topic\n"
         f"- React to what's actually being said in this specific message, not just the general situation\n\n"
         f"HARD RULES:\n"
-        f"- Don't invent facts, names, events, or plans not visible in the conversation.\n"
+        f"- FACTS: Never invent specific events, actions, dates, project names, technical details, or things\n"
+        f"  people said/did. Only reference facts that appear in RELEVANT PAST CHAT above or the current conversation.\n"
+        f"- NO MEMORY = VAGUE: If you don't have evidence for something specific, reply vaguely in your voice\n"
+        f'  ("yaad nahi", "pata nahi", "kuch tha shayad") — NEVER fabricate a plausible-sounding story.\n'
+        f"- When RELEVANT PAST CHAT is provided, use ONLY facts explicitly stated there. Do not extrapolate.\n"
+        f"- Don't invent plot details just because they sound consistent with what you know about a person.\n"
         f"- Don't explain yourself or add meta-commentary.\n"
         f"- One reply only — no options, no alternatives, no 'or maybe'.\n"
         f"- Vary reply length dramatically — sometimes 1–3 chars, sometimes 20–40 chars. Match the energy."
@@ -209,29 +233,35 @@ def _build_context(
     workspace_id: str,
     person: PersonDetail,
     user_message: str,
-    *,
-    skip_rag: bool = False,
-) -> tuple[str, list[str], list[str], float]:
-    """Build persona system prompt parts. Returns (system, solo, convo, context_ms)."""
-    t0 = time.perf_counter()
-    rag: list[dict] = []
-    if not skip_rag:
-        try:
-            query_vec = embed_service.embed_query(user_message)
-            rag = vector_service.semantic_search(
-                workspace_id,
-                query_vec,
-                top_k=_PERSONA_RAG_TOP_K,
-                person_id=person.id,
-            )
-        except Exception as exc:
-            logger.warning("Persona RAG lookup failed: %s", exc)
+    history: list[dict[str, str]],
+) -> tuple[str, list[str], list[str], float, bool, list[str]]:
+    """Build persona system prompt.
 
-    solo = _person_only_texts(person, rag)
+    Returns (system, solo, convo, context_ms, used_memory, memory_blocks).
+    memory_blocks is also returned raw so callers can pass it to the validation
+    graph without having to re-parse it out of the built system prompt.
+    """
+    t0 = time.perf_counter()
+    memory_blocks: list[str] = []
+    used_memory = False
+    try:
+        ctx = run_persona_context(
+            workspace_id,
+            person.id,
+            person.display_name,
+            user_message,
+            history,
+        )
+        memory_blocks = list(ctx.get("memory_blocks") or [])
+        used_memory = bool(memory_blocks)
+    except Exception as exc:
+        logger.warning("Persona context graph failed: %s", exc)
+
+    solo = _solo_examples(person)
     convo = list(_cached_convo_snippets(workspace_id, person.display_name))
-    system = build_system_prompt(person, solo, convo)
+    system = build_system_prompt(person, solo, convo, memory_blocks=memory_blocks or None)
     context_ms = (time.perf_counter() - t0) * 1000
-    return system, solo, convo, context_ms
+    return system, solo, convo, context_ms, used_memory, memory_blocks
 
 
 def summarize_conversation(
@@ -278,14 +308,20 @@ def _chat_messages(
     *,
     previous_interaction_id: str | None = None,
     conversation_summary: str | None = None,
-) -> list[dict[str, str]]:
-    # Follow-up turns already carry chat state server-side — skip heavy RAG + rebuild.
-    skip_rag = bool(previous_interaction_id)
-    system, _, _, context_ms = _build_context(workspace_id, person, user_message, skip_rag=skip_rag)
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Build Gemini message list for a persona turn.
+
+    Returns (turns, memory_blocks).  memory_blocks is passed separately to the
+    generation + validation graph so it can check replies against injected context.
+    """
+    # Every turn runs the two-stage router; follow-ups can still ask about past chat.
+    system, _, _, context_ms, used_memory, memory_blocks = _build_context(
+        workspace_id, person, user_message, history
+    )
     logger.info(
-        "Persona context built in %.0fms (rag=%s, workspace=%s person=%s)",
+        "Persona context built in %.0fms (memory=%s, workspace=%s person=%s)",
         context_ms,
-        not skip_rag,
+        used_memory,
         workspace_id,
         person.id,
     )
@@ -312,7 +348,7 @@ def _chat_messages(
     for turn in recent:
         turns.append({"role": turn["role"], "content": turn["content"]})
     turns.append({"role": "user", "content": user_message})
-    return turns
+    return turns, memory_blocks
 
 
 def reply(
@@ -326,7 +362,7 @@ def reply(
     conversation_summary: str | None = None,
 ) -> tuple[str, str | None]:
     _require_gemini_persona(person)
-    messages = _chat_messages(
+    messages, memory_blocks = _chat_messages(
         workspace_id,
         person,
         history,
@@ -335,13 +371,15 @@ def reply(
         conversation_summary=conversation_summary,
     )
     interaction_ids: list[str] = []
-    full_text = gemini_service.chat(
+    full_text = run_persona_generation(
+        person.display_name,
         messages,
+        memory_blocks,
+        persona_background=_persona_background(person),
         temperature=temperature,
         previous_interaction_id=previous_interaction_id,
-        assistant_label=person.display_name,
         interaction_id_out=interaction_ids,
-    ).strip()
+    )
     if not full_text:
         raise gemini_service.GeminiError("Gemini returned an empty response")
     # Collapse burst separator to a space for the non-streaming single-reply endpoint.
@@ -375,7 +413,7 @@ def sse_stream(
         _require_gemini_persona(person)
         yield f"data: {json.dumps({'status': 'thinking'})}\n\n"
 
-        messages = _chat_messages(
+        messages, memory_blocks = _chat_messages(
             workspace_id,
             person,
             history,
@@ -384,14 +422,17 @@ def sse_stream(
             conversation_summary=conversation_summary,
         )
 
-        # Use non-streaming call so we can split burst messages before emitting.
-        full_text = gemini_service.chat(
+        # Use non-streaming generation so we can split burst messages before emitting,
+        # and so the validation graph can inspect the full reply before delivery.
+        full_text = run_persona_generation(
+            person.display_name,
             messages,
+            memory_blocks,
+            persona_background=_persona_background(person),
             temperature=0.85,
             previous_interaction_id=previous_interaction_id,
-            assistant_label=person.display_name,
             interaction_id_out=interaction_ids,
-        ).strip()
+        )
 
         first_response_ms = (time.perf_counter() - t0) * 1000
         logger.info(

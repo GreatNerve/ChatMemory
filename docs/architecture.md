@@ -50,7 +50,7 @@ ChatMemory/
 │   └── app/
 │       ├── main.py
 │       ├── api/routes/
-│       ├── graphs/            # ingest, qa, persona_train
+│       ├── graphs/            # ingest, qa, persona_train, persona_chat
 │       ├── services/          # parser, chroma, embed, gemini, rag_chain, jobs, analytics
 │       └── core/              # config, gpu_lock, schemas
 ├── frontend/
@@ -74,8 +74,9 @@ ChatMemory/
 | `ingest` | Workspace create + file upload | Async job + SSE |
 | `qa` | POST ask | Sync (seconds) |
 | `persona_train` | POST train (Gemini activation) | Async job + SSE |
+| `persona_chat` | POST chat / chat/stream | Sync (seconds) |
 
-Persona **chat** and **summarize** are direct routes (`persona_chat` service), not graphs.
+Persona **summarize** remains a direct route on the `persona_chat` service (no graph).
 
 ### Services (`backend/app/services/`)
 
@@ -84,11 +85,13 @@ Persona **chat** and **summarize** are direct routes (`persona_chat` service), n
 | `parser` + `preprocess` | WhatsApp `.txt` → cleaned messages + speakers |
 | `embed` | `multilingual-e5-large` via sentence-transformers (CUDA or CPU) |
 | `chroma` | LangChain Chroma collection per workspace |
-| `bm25` | Keyword index for hybrid retrieval |
+| `bm25` | Keyword index for hybrid retrieval (cached per workspace; cleared on ingest) |
+| `retrieval` | Persona fast retrieve + turn-window expansion |
+| `history_router` | Two-stage persona memory router (heuristics + Gemini classify) |
 | `langchain_llm` | `GeminiInteractionsChat` → `gemini.py` Interactions API |
 | `rag_chain` | LangChain Gemini: rewrite, rerank, grounded answer |
 | `gemini` | Low-level Interactions API; persona chat |
-| `persona_chat` | System prompt, burst `||`, history window, summarization |
+| `persona_chat` | System prompt, LangGraph context + generation, burst `||`, history window, summarization |
 | `workspace` | CRUD meta, paths, build-time LLM extraction (personality, style, chat analysis) |
 | `analytics` | Turn-based response times, weekly/monthly growth series, heatmap |
 | `rate_limit` | Gemini RPM/TPM guard for build-time analysis calls |
@@ -133,13 +136,33 @@ Build-time Gemini calls share a **14 RPM / 100k TPM** sliding-window limiter (`r
 
 ### Persona chat
 
+Two LangGraph pipelines in `persona_chat.py`; orchestrated by `persona_chat` service. Full node detail: [langgraph/persona-chat.md](./langgraph/persona-chat.md).
+
+**Context graph** (`run_persona_context`):
+
 ```
-message + history (+ optional conversationSummary, previousInteractionId)
-  → system prompt: personality + chat analysis + writing style + samples + anti-loop rules
-  → history window up to 30 turns (fallback 20 if char budget exceeded)
-  → optional RAG context (skipped when previousInteractionId set)
-  → Gemini → reply; optional burst via || in SSE stream
+message + history
+  → fast_route (heuristics: casual | memory | ambiguous)
+  → casual → skip_retrieve
+  → memory → retrieve (person-first Chroma + BM25, group fallback if weak)
+  → ambiguous → classify (Gemini JSON) → retrieve OR skip_retrieve
+  → expand_to_turn_windows (3 before + 2 after from export.txt)
+  → memory_blocks → === RELEVANT PAST CHAT === in system prompt
 ```
+
+**Generation graph** (`run_persona_generation`):
+
+```
+system + history + user message
+  → generate_reply (Gemini)
+  → validate_factual_claims (Gemini JSON hallucination check)
+  → if flagged: regenerate_safe once (STRICT RECALL prefix)
+  → reply; optional burst via || in SSE stream
+```
+
+Every turn runs the context router (no memory skip on follow-ups). Style comes from activation fields + samples; memory blocks are factual excerpts only. HARD RULES: no invented facts; vague ("yaad nahi") when evidence is missing. Low-score hits dropped at `persona_memory_inject_min_score` (default 0.35). Parser noise filter (`is_noise_message`) applies at index/read — not on raw export.
+
+`previousInteractionId` chains Gemini Interactions API only; it does not skip memory routing.
 
 When UI history exceeds **24 turns**, client calls `/chat/summarize`, keeps last **10** verbatim, passes `conversationSummary` on subsequent chats.
 
@@ -178,6 +201,9 @@ Computed at end of ingest and cached in `analytics.json`. `GET .../analytics?ref
 | `GEMINI_MODEL` | `gemini-3.5-flash` | backend `.env` |
 | `EMBED_MODEL` | `intfloat/multilingual-e5-large` | backend `.env` |
 | `VECTOR_STORE` | `chroma` | backend `.env` |
+| `persona_memory_inject_min_score` | `0.35` | backend config |
+| `persona_retrieve_top_k` | `8` | backend config |
+| `persona_memory_window_before` / `after` | `3` / `2` | backend config |
 | `NEXT_PUBLIC_API_URL` | `http://127.0.0.1:8000/api/v1` | frontend `.env.local` |
 
 ## Pre-commit

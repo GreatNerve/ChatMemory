@@ -84,4 +84,4 @@ Local embed for query vector acquires `gpu_lock`. Returns **409** if another GPU
 ## Related
 
 - [../api.md](../api.md) — ask endpoint
-- [../decisions.md](../decisions.md) — ADR-013, ADR-021
+- [../decisions.md](../decisions.md) — ADR-013, ADR-021, ADR-026

@@ -33,6 +33,18 @@ class Settings(BaseSettings):
     qa_grade_threshold: float = 0.6
     qa_min_passing_chunks: int = 2
 
+    persona_retrieve_top_k: int = 8
+    persona_retrieve_weak_threshold: float = 0.32
+    persona_retrieve_min_strong_hits: int = 2
+    persona_retrieve_strong_score: float = 0.25
+    persona_memory_window_before: int = 3
+    persona_memory_window_after: int = 2
+    persona_memory_max_blocks: int = 5
+    # Minimum cosine similarity score a retrieved hit must reach before its memory
+    # block is injected into the persona system prompt.  Hits below this threshold
+    # are discarded entirely so weakly-related context never reaches the model.
+    persona_memory_inject_min_score: float = 0.35
+
     embed_batch_size: int = 32
     embed_device: str = "auto"  # auto | cuda | cpu
 

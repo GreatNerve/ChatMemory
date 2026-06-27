@@ -86,7 +86,9 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 **Status:** Accepted
 
-**Decision:** Separate `ingest`, `qa`, `persona_train` graphs. Persona chat is a direct route.
+**Decision:** Separate `ingest`, `qa`, `persona_train`, and `persona_chat` graphs. Persona summarize remains a direct service route.
+
+**Note:** Superseded in part by ADR-026 (`persona_chat` graph added).
 
 ---
 
@@ -118,7 +120,7 @@ Architecture Decision Records from product grill. New decisions append at bottom
 
 **Decision:** Refuse with `not_found` when &lt; 2 chunks pass relevance threshold. Citations required on answers.
 
-**Consequences:** Persona chat does not use RAG in MVP.
+**Consequences:** Persona chat uses optional memory recall (ADR-026), not strict Q&A refusal rules.
 
 ---
 
@@ -241,6 +243,25 @@ Architecture Decision Records from product grill. New decisions append at bottom
 **Decision:** Single git repository at repo root (`backend/` + `frontend/` + `docs/`). Pre-commit at root (ruff on `backend/`). `.agents/` and `no-push/` gitignored.
 
 **Consequences:** Install hooks with `uv run pre-commit install -c ../.pre-commit-config.yaml` from `backend/`.
+
+---
+
+## ADR-026: Persona chat memory recall (router B + validation)
+
+**Status:** Accepted
+
+**Context:** Persona chat was style-only (ADR-013 consequence). Users ask personas about past events ("yaad hai?", "kab plan kiya tha?"). Q&A strict RAG is too heavy and refuses too often for conversational mimic. Follow-up turns can still need history lookup.
+
+**Decision:**
+
+- Fourth LangGraph: `persona_chat` with two compiled subgraphs — **context** (`run_persona_context`) and **generation** (`run_persona_generation`).
+- **Router B:** `fast_history_route()` heuristics first; Gemini JSON `classify_history_need()` only on `ambiguous`. Casual → no retrieval; obvious memory → retrieve; ambiguous → classify then retrieve or skip.
+- **Retrieval scope C:** Person-first Chroma + BM25; widen to full group when person hits are weak. No LLM rerank. Score gate at `persona_memory_inject_min_score`. Turn windows from `export.txt` (3 before, 2 after) with `target_person` filter.
+- Memory injected in `=== RELEVANT PAST CHAT ===` — separate from style samples. Every chat turn runs the router (no skip on `previousInteractionId`).
+- **Validation node:** After generation, Gemini checks for invented facts vs memory + conversation; one `regenerate_safe` retry with STRICT RECALL prefix.
+- WhatsApp **noise filter** at index/read (`is_noise_message`); BM25 cache per workspace, invalidated on ingest.
+
+**Consequences:** Extra Gemini calls on ambiguous routes and on hallucination retry. Persona chat is not strict Q&A — vague in-character replies when memory is empty. API contract unchanged (memory is server-side). Supersedes ADR-010/ADR-013 persona-chat consequences in part.
 
 ---
 

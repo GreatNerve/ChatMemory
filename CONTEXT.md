@@ -34,7 +34,7 @@ Domain and locked decisions. Workflow: [AGENTS.md](./AGENTS.md).
 
 | Q&A | Grounded RAG over chat history with citations |
 
-| Persona chat | Style mimic only — not factual memory lookup |
+| Persona chat | Gemini style mimic with optional memory recall from indexed chat (router + validation) |
 
 | Ingest | Preprocess export → parse → index speakers → embed → Chroma |
 
@@ -56,7 +56,7 @@ Domain and locked decisions. Workflow: [AGENTS.md](./AGENTS.md).
 
 | Reads / Q&A | Chroma + multilingual-e5-large + hybrid BM25 + Gemini rerank/generate |
 
-| Persona | Gemini activation (style profile + samples) |
+| Persona | Gemini activation (style profile + samples) + optional memory recall at chat time |
 
 | Embeddings | `intfloat/multilingual-e5-large` via sentence-transformers (CUDA or CPU) |
 
@@ -98,7 +98,7 @@ Domain and locked decisions. Workflow: [AGENTS.md](./AGENTS.md).
 
 | 12 | Vector DB: Chroma per workspace (LangChain adapter) |
 
-| 13 | LangGraph: 3 graphs (ingest, qa, persona_train) |
+| 13 | LangGraph: 4 graphs (ingest, qa, persona_train, persona_chat) |
 
 | 14 | Data root: `./data/` (dev); gitignored |
 
@@ -115,6 +115,7 @@ Domain and locked decisions. Workflow: [AGENTS.md](./AGENTS.md).
 | 20 | Frontend: TanStack Query + pnpm + Zod |
 
 | 21 | Monorepo: `backend/` + `frontend/` + `docs/` |
+| 22 | Persona memory: two-stage router (heuristics → Gemini on ambiguous); person-first retrieval with group fallback; post-generation factual validation (max 1 retry) |
 
 
 
@@ -129,8 +130,6 @@ Domain and locked decisions. Workflow: [AGENTS.md](./AGENTS.md).
 - Cross-group speaker merge (future)
 
 - Analytics dashboards (topic charts, word clouds)
-
-- Persona chat with RAG facts (future hybrid)
 
 - Light mode / theme toggle
 

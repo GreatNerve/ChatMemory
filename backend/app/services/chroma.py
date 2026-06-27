@@ -149,4 +149,7 @@ def export_bm25_corpus(workspace_id: str, messages: list[Message]) -> str:
     out = workspace_path(workspace_id) / "bm25" / "corpus.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(corpus, ensure_ascii=False), encoding="utf-8")
+    from app.services import bm25 as bm25_service
+
+    bm25_service.clear_index_cache(workspace_id)
     return str(out)

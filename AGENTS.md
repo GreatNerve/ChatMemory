@@ -16,7 +16,7 @@ Workflow. Domain: [CONTEXT.md](./CONTEXT.md). Detail: `docs/`.
 
 3. For UI work: `docs/ui-design.md`
 
-4. For LangGraph: `docs/langgraph/`
+4. For LangGraph: `docs/langgraph/` — [persona-chat.md](./docs/langgraph/persona-chat.md) for memory recall flow
 
 
 
@@ -127,4 +127,15 @@ Env (frontend): `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000`
 
 
 One question → recommend → record in `CONTEXT.md` grill table + `docs/decisions.md`
+
+
+
+## LangGraph graphs
+
+| Graph | File | Doc |
+|-------|------|-----|
+| `ingest` | `graphs/ingest.py` | `docs/langgraph/ingest.md` |
+| `qa` | `graphs/qa.py` | `docs/langgraph/qa.md` |
+| `persona_train` | `graphs/persona_train.py` | `docs/langgraph/persona-train.md` |
+| `persona_chat` | `graphs/persona_chat.py` | `docs/langgraph/persona-chat.md` |
 

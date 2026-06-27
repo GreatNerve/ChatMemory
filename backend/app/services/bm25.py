@@ -4,6 +4,8 @@ import re
 
 from app.core.paths import workspace_path
 
+_index_cache: dict[str, tuple[float, "Bm25Index"]] = {}
+
 
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"\w+", text.lower(), flags=re.UNICODE)
@@ -76,14 +78,28 @@ class Bm25Index:
         return results
 
 
+def clear_index_cache(workspace_id: str | None = None) -> None:
+    """Drop cached BM25 indexes (call after ingest rewrites corpus.json)."""
+    if workspace_id is None:
+        _index_cache.clear()
+        return
+    _index_cache.pop(workspace_id, None)
+
+
 def load_index(workspace_id: str) -> Bm25Index | None:
     path = workspace_path(workspace_id) / "bm25" / "corpus.json"
     if not path.exists():
         return None
+    mtime = path.stat().st_mtime
+    cached = _index_cache.get(workspace_id)
+    if cached and cached[0] == mtime:
+        return cached[1]
     corpus = json.loads(path.read_text(encoding="utf-8"))
     if not corpus:
         return None
-    return Bm25Index(corpus)
+    index = Bm25Index(corpus)
+    _index_cache[workspace_id] = (mtime, index)
+    return index
 
 
 def hybrid_merge(semantic: list[dict], keyword: list[dict], limit: int = 40) -> list[dict]:
