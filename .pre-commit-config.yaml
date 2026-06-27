@@ -1,0 +1,21 @@
+# Monorepo hooks — install from repo root:
+#   cd backend && uv sync && uv run pre-commit install -c ../.pre-commit-config.yaml
+# Frontend ESLint is not hooked here; run `cd frontend && pnpm lint` in CI or manually.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/

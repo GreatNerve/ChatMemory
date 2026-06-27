@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --cm-bg: #0a0a0a;
+  --cm-surface: #141414;
+  --cm-surface-raised: #1a1a1a;
+  --cm-border: #f5f5f5;
+  --cm-border-muted: #444444;
+  --cm-text: #f5f5f5;
+  --cm-text-muted: #a3a3a3;
+  --cm-accent: #e8ff00;
+  --cm-accent-fg: #0a0a0a;
+  --cm-error: #ff3333;
+  --cm-warning: #ffaa00;
+  --cm-success: #00ff88;
+}
+
+@theme inline {
+  --font-mono: var(--font-space-mono);
+  --font-body: var(--font-ibm-plex);
+}
+
+.font-mono {
+  font-family: var(--font-space-mono), ui-monospace, monospace;
+}
+
+.font-body {
+  font-family: var(--font-ibm-plex), system-ui, sans-serif;
+}
+
+body {
+  background: var(--cm-bg);
+  color: var(--cm-text);
+  font-family: var(--font-ibm-plex), system-ui, sans-serif;
+}
+
+.cm-shadow-brutal {
+  box-shadow: 4px 4px 0 var(--cm-accent);
+}
+
+.cm-shadow-brutal:active:not(:disabled) {
+  box-shadow: 2px 2px 0 var(--cm-accent);
+  transform: translate(2px, 2px);
+}

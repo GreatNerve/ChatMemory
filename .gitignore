@@ -1,0 +1,47 @@
+# Runtime data — never commit
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+.pnpm-store/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Model caches (Hugging Face, etc.)
+.cache/
+models/
+
+# Logs
+*.log
+
+.env
+# Local exports — do not commit
+no-push/
+
+# Cursor agent skills (local only)
+.agents/
+skills-lock.json

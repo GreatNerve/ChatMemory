@@ -1,0 +1,13 @@
+# Group export patterns (synthetic — not the full no-push export)
+# US Android date, narrow no-break space before AM/PM, group name with commas
+
+6/24/24, 12:32 PM - Test Group, Sample Workspace: Hi bob
+Alice here (team mate)
+6/24/24, 12:33 PM - Bob: We are planning to recruit 2 people in UI/UX
+4/6/25, 6:15 PM - Test Group, Sample Workspace: This message was deleted
+8/6/25, 8:29 PM - Test Group, Sample Workspace: Bhai kaam ke time no mazak <This message was edited>
+8/31/25, 11:02 PM - Bob: To my team for Project Alpha '25
+Honestly, I don't even have enough words
+Your designs left everyone absolutely stunned
+8/31/25, 11:02 PM - Bob: ye message sahi ha?
+9/21/23, 8:23 PM - Messages and calls are end-to-end encrypted. Learn more
