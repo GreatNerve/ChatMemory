@@ -256,11 +256,38 @@ def build_system_prompt(
     # Build conversation partner context (empty string for single-person workspaces).
     partner_block = conversation_partner_block(partners) if partners else ""
 
+    # Determine who the current user is for the identity anchor in HARD RULES.
+    # In a 2-person workspace the partner list has exactly one entry — that is the person
+    # on the other side of the chat right now.  Warn on degenerate cases so operators
+    # can spot mis-configured workspaces early.
+    partner_names = [
+        (p.get("displayName") or "").strip()
+        for p in (partners or [])
+        if (p.get("displayName") or "").strip()
+    ]
+    if not partner_names:
+        logger.warning(
+            "Persona prompt: no conversation partner found for workspace (single-person workspace "
+            "or all partner files missing displayName) — identity anchor will be generic."
+        )
+        partner_name = ""
+    elif len(partner_names) > 1:
+        logger.warning(
+            "Persona prompt: %d partners found (%s) — expected 1. Using first name for identity anchor.",
+            len(partner_names),
+            ", ".join(partner_names),
+        )
+        partner_name = partner_names[0]
+    else:
+        partner_name = partner_names[0]
+
     memory_section = ""
     if memory_blocks:
         joined = "\n\n---\n".join(memory_blocks)
         memory_section = (
             f"=== RELEVANT PAST CHAT (real WhatsApp history) ===\n"
+            f"NOTE: The following are PAST chat excerpts. Names in these excerpts refer to "
+            f"historical participants, NOT the current user.\n"
             f"Use these excerpts for factual recall. Stay in character \u2014 weave facts naturally, "
             f"do not sound like you are reading a log.\n"
             f"{joined}\n\n"
@@ -413,6 +440,7 @@ def build_system_prompt(
         relationship_section=relationship_section,
         behavioral_patterns_section=behavioral_patterns_section,
         emotional_section=emotional_section,
+        partner_name=partner_name,
     )
 
 

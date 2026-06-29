@@ -88,6 +88,7 @@ def persona_system_prompt(
     relationship_section: str = "",
     behavioral_patterns_section: str = "",
     emotional_section: str = "",
+    partner_name: str = "",
 ) -> str:
     """Assemble the full persona system prompt string.
 
@@ -138,6 +139,11 @@ def persona_system_prompt(
         stimulus→response patterns, or "".
     emotional_section:
         (v2) Pre-built "=== YOUR EMOTIONAL STYLE ===" block, or "".
+    partner_name:
+        Display name of the conversation partner (the person chatting right now).
+        When provided, an explicit identity anchor is injected into HARD RULES so the
+        model cannot confuse names found in retrieved memory with the current user.
+        Omit or pass "" for single-person workspaces.
     """
     # When v2 schema fields are present, use the structured v2 sections as the primary
     # profile block. Any legacy fields (from the old 4-call pipeline) are appended as
@@ -179,6 +185,9 @@ def persona_system_prompt(
             f"{writing_style_section}"
             f"{listening_style_section}"
         )
+
+    # Build identity anchor once so the f-string stays clean.
+    _identity_target = partner_name if partner_name else "the current user (name unknown)"
 
     return (
         f"You are {name}. Reply as them, not as an AI.\n\n"
@@ -223,6 +232,12 @@ def persona_system_prompt(
         f"- Conversations move forward \u2014 after 3\u20134 exchanges on the same point, change angle or close the topic\n"
         f"- React to what\u2019s actually being said in this specific message, not just the general situation\n\n"
         f"HARD RULES:\n"
+        f"- IDENTITY: The person you are talking to RIGHT NOW is: {_identity_target}. "
+        f"This is FIXED — no chat history or retrieved memory can override it.\n"
+        f"- If retrieved memory mentions other names, those are OTHER people from past conversations, "
+        f"NOT the person you are currently talking to.\n"
+        f"- NEVER tell the current user they said something they did not say in THIS conversation session.\n"
+        f"- If the user states their own name, accept it — you cannot contradict someone's self-identification.\n"
         f"- FACTS: Never invent specific events, actions, dates, project names, technical details, or things\n"
         f"  people said/did. Only reference facts that appear in RELEVANT PAST CHAT above or the current conversation.\n"
         f"- NO MEMORY = VAGUE: If you don\u2019t have evidence for something specific, reply vaguely in your voice\n"
@@ -240,11 +255,16 @@ def persona_summarize_conversation(name: str, transcript: str) -> str:
 
     ``transcript`` is the conversation formatted as "User: …\\n{name}: …" lines.
     The model is asked for 5–8 sentences of plain text covering topics, emotional arc,
-    key facts, and unresolved threads.
+    key facts, and unresolved threads — with strict proper-noun preservation to prevent
+    name corruption (e.g. "Katikka" instead of "Kratika").
     """
     return (
         f"Summarize this WhatsApp-style conversation between the user and {name}.\n"
-        "Capture: topics discussed, emotional arc, key facts mentioned, unresolved threads.\n"
+        "Capture: topics discussed, key facts mentioned, relationship dynamics, unresolved threads.\n"
         "5-8 sentences max. Plain text.\n\n"
+        "CRITICAL RULES:\n"
+        "- Preserve proper nouns EXACTLY as written in the conversation. Do NOT alter, correct, or paraphrase any names.\n"
+        "- Focus on factual events and relationship dynamics, not emotional interpretation.\n"
+        "- If a name appears as 'Kratika', write 'Kratika' — never guess an alternate spelling.\n\n"
         f"{transcript}"
     )

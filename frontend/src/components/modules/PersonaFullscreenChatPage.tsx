@@ -117,8 +117,12 @@ export function PersonaFullscreenChatPage({
   // Live stage events accumulating for the currently-streaming turn.
   const [streamingStages, setStreamingStages] = useState<StageEvent[]>([]);
   const [lastInteractionId, setLastInteractionId] = useState<string | null>(null);
-  const [conversationSummary, setConversationSummary] = useState<string | null>(null);
+  // Cumulative summaries — new summaries append; old ones are never discarded.
+  const [summaries, setSummaries] = useState<{ timestamp: string; content: string }[]>([]);
   const [summarizeError, setSummarizeError] = useState<string | null>(null);
+  // Tracks the history length at the time of the most recent summarization so we
+  // only re-trigger when SUMMARIZE_THRESHOLD new messages have arrived since then.
+  const lastSummarizedCountRef = useRef(0);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   // Output-only toggle: hides the INPUT section in ThinkingPanel.
@@ -212,20 +216,45 @@ export function PersonaFullscreenChatPage({
     });
   }
 
+  /**
+   * Formats all accumulated summaries into a single string for the backend.
+   * Single summary → plain text. Multiple → labelled EARLIER CONTEXT block.
+   */
+  function formatSummariesForApi(
+    allSummaries: { timestamp: string; content: string }[],
+  ): string | null {
+    if (allSummaries.length === 0) return null;
+    if (allSummaries.length === 1) return allSummaries[0].content;
+    const parts = allSummaries.map((s, i) => `[Part ${i + 1}]\n${s.content}`).join("\n\n");
+    return `=== EARLIER CONTEXT ===\n${parts}`;
+  }
+
   async function maybeSummarizeHistory(
     nextHistory: ChatMessage[],
     nextStages: StageEvent[][],
   ): Promise<[ChatMessage[], StageEvent[][]]> {
-    if (nextHistory.length <= SUMMARIZE_THRESHOLD) return [nextHistory, nextStages];
+    // Only trigger when SUMMARIZE_THRESHOLD new messages have arrived since last summary.
+    if (nextHistory.length < lastSummarizedCountRef.current + SUMMARIZE_THRESHOLD) {
+      return [nextHistory, nextStages];
+    }
 
-    const older = nextHistory.slice(0, -KEEP_RECENT);
-    const historyForSummarize: ChatMessage[] = conversationSummary
+    // Summarize only the messages added since the last summarization point,
+    // keeping the most recent KEEP_RECENT turns verbatim for the live context window.
+    const newStart = lastSummarizedCountRef.current;
+    const newEnd = nextHistory.length - KEEP_RECENT;
+    if (newEnd <= newStart) return [nextHistory, nextStages];
+
+    const messagesToSummarize = nextHistory.slice(newStart, newEnd);
+
+    // Prepend existing summaries as context so the LLM can build on them.
+    const previousSummaryText = formatSummariesForApi(summaries);
+    const historyForSummarize: ChatMessage[] = previousSummaryText
       ? [
           { role: "user", content: "Context from earlier in this conversation (already summarized):" },
-          { role: "assistant", content: conversationSummary },
-          ...older,
+          { role: "assistant", content: previousSummaryText },
+          ...messagesToSummarize,
         ]
-      : older;
+      : messagesToSummarize;
 
     setSummarizeError(null);
     try {
@@ -233,9 +262,17 @@ export function PersonaFullscreenChatPage({
         history: historyForSummarize,
         keepRecent: KEEP_RECENT,
       });
-      setConversationSummary(result.summary);
+      // Append — never overwrite. All summaries are preserved cumulatively.
+      setSummaries((prev) => [
+        ...prev,
+        { timestamp: new Date().toISOString(), content: result.summary },
+      ]);
+      // Mark the current history length as summarized so the next trigger
+      // waits for SUMMARIZE_THRESHOLD additional messages.
+      lastSummarizedCountRef.current = nextHistory.length;
       setLastInteractionId(null);
-      return [nextHistory.slice(-KEEP_RECENT), nextStages.slice(-KEEP_RECENT)];
+      // Original messages are KEPT in history — only the context summary is updated.
+      return [nextHistory, nextStages];
     } catch (err) {
       setSummarizeError(err instanceof ApiError ? err.message : "Summarization failed");
       return [nextHistory, nextStages];
@@ -275,7 +312,8 @@ export function PersonaFullscreenChatPage({
             message: userMsg.content,
             history: priorHistory,
             previousInteractionId: lastInteractionId,
-            conversationSummary,
+            // Format all accumulated summaries into one context string for the backend.
+            conversationSummary: formatSummariesForApi(summaries),
           },
           (ev) => {
             // Thinking status — ignore, we already show a typing indicator.
@@ -346,7 +384,7 @@ export function PersonaFullscreenChatPage({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatInput, chatLoading, history, stagesHistory, lastInteractionId, conversationSummary, workspaceId, personId],
+    [chatInput, chatLoading, history, stagesHistory, lastInteractionId, summaries, workspaceId, personId],
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -424,9 +462,9 @@ export function PersonaFullscreenChatPage({
 
         {/* Right-side header controls */}
         <div className="ml-auto flex items-center gap-3">
-          {conversationSummary ? (
+          {summaries.length > 0 ? (
             <span className="font-mono text-[10px] uppercase text-[var(--cm-text-muted)]">
-              Earlier summarized
+              {summaries.length === 1 ? "Earlier summarized" : `${summaries.length} summaries`}
             </span>
           ) : null}
           {/* Only render the PDF button once there are messages */}
