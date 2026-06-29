@@ -1,8 +1,11 @@
+from app.core.paths import workspace_path
+from collections import defaultdict
 import json
-import math
+import logging
+import numpy as np
 import re
 
-from app.core.paths import workspace_path
+logger = logging.getLogger("chatmemory.bm25")
 
 _index_cache: dict[str, tuple[float, "Bm25Index"]] = {}
 
@@ -12,39 +15,49 @@ def _tokenize(text: str) -> list[str]:
 
 
 class _Bm25Scorer:
-    """Pure-Python BM25 — no numpy (avoids DLL blocks on locked-down Windows)."""
+    """Inverted-index BM25 backed by numpy arrays."""
 
     def __init__(self, corpus_tokens: list[list[str]], *, k1: float = 1.5, b: float = 0.75) -> None:
         self._k1 = k1
         self._b = b
-        self._docs = corpus_tokens
-        self._n = len(corpus_tokens)
-        self._doc_len = [len(d) for d in corpus_tokens]
-        self._avgdl = sum(self._doc_len) / self._n if self._n else 0.0
-        self._df: dict[str, int] = {}
-        for doc in corpus_tokens:
-            for term in set(doc):
-                self._df[term] = self._df.get(term, 0) + 1
+        n = len(corpus_tokens)
+        self._n = n
 
-    def score(self, query_tokens: list[str]) -> list[float]:
-        scores: list[float] = []
-        for i, doc in enumerate(self._docs):
-            doc_len = self._doc_len[i]
-            tf: dict[str, int] = {}
-            for term in doc:
-                tf[term] = tf.get(term, 0) + 1
-            total = 0.0
-            for term in query_tokens:
-                freq = self._df.get(term, 0)
-                if freq == 0:
-                    continue
-                idf = math.log((self._n - freq + 0.5) / (freq + 0.5) + 1.0)
-                term_freq = tf.get(term, 0)
-                denom = term_freq + self._k1 * (
-                    1.0 - self._b + self._b * doc_len / (self._avgdl or 1.0)
-                )
-                total += idf * (term_freq * (self._k1 + 1.0)) / (denom or 1.0)
-            scores.append(total)
+        doc_lens = np.array([len(d) for d in corpus_tokens], dtype=np.float32)
+        self._avgdl = float(doc_lens.mean()) if n else 1.0
+        self._doc_lens = doc_lens
+
+        # Build inverted index: term -> {doc_id: term_freq}
+        raw: dict[str, dict[int, int]] = defaultdict(dict)
+        df: dict[str, int] = {}
+        for doc_id, tokens in enumerate(corpus_tokens):
+            tf_local: dict[str, int] = {}
+            for t in tokens:
+                tf_local[t] = tf_local.get(t, 0) + 1
+            for t, freq in tf_local.items():
+                raw[t][doc_id] = freq
+                df[t] = df.get(t, 0) + 1
+
+        # Convert postings to numpy arrays for fast scatter-add at query time
+        self._inverted: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        self._idf: dict[str, float] = {}
+        for term, postings in raw.items():
+            ids = np.array(list(postings.keys()), dtype=np.int32)
+            freqs = np.array(list(postings.values()), dtype=np.float32)
+            self._inverted[term] = (ids, freqs)
+            freq_count = df[term]
+            self._idf[term] = float(np.log((n - freq_count + 0.5) / (freq_count + 0.5) + 1.0))
+
+    def score(self, query_tokens: list[str]) -> np.ndarray:
+        scores = np.zeros(self._n, dtype=np.float32)
+        for term in set(query_tokens):
+            if term not in self._inverted:
+                continue
+            doc_ids, tf = self._inverted[term]
+            idf = self._idf[term]
+            dl = self._doc_lens[doc_ids]
+            denom = tf + self._k1 * (1.0 - self._b + self._b * dl / self._avgdl)
+            scores[doc_ids] += idf * (tf * (self._k1 + 1.0)) / np.maximum(denom, 1e-9)
         return scores
 
 
@@ -56,23 +69,24 @@ class Bm25Index:
 
     def search(self, query: str, top_k: int) -> list[dict]:
         tokens = _tokenize(query)
+        if not tokens:
+            return []
         scores = self._scorer.score(tokens)
-        ranked = sorted(
-            zip(scores, self._corpus, strict=False),
-            key=lambda x: x[0],
-            reverse=True,
-        )[:top_k]
+        # filter positives then partial sort to avoid a full O(n log n) sort
+        positive = np.where(scores > 0)[0]
+        if len(positive) == 0:
+            return []
+        top_idx = positive[np.argsort(scores[positive])[::-1][:top_k]]
         results: list[dict] = []
-        for score, row in ranked:
-            if score <= 0:
-                continue
+        for i in top_idx:
+            row = self._corpus[i]
             results.append(
                 {
                     "message_id": row["messageId"],
                     "speaker": row["speaker"],
                     "timestamp": row["timestamp"],
                     "snippet": row["text"][:500],
-                    "score": float(score),
+                    "score": float(scores[i]),
                 }
             )
         return results

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from app.prompts.routing import persona_classify_history_need
+from app.services import gemini as gemini_service
 import json
 import re
 from typing import Literal
-
-from app.services import gemini as gemini_service
 
 FastRoute = Literal["casual", "memory", "ambiguous"]
 
@@ -140,9 +140,25 @@ def fast_history_route(message: str) -> FastRoute:
 def classify_history_need(
     user_message: str,
     history: list[dict[str, str]],
-) -> tuple[bool, str]:
-    """Gemini structured classify for ambiguous turns. Returns (needs_history, search_query)."""
-    recent = history[-4:]
+) -> tuple[bool, bool, list[str], str]:
+    """Gemini structured classify for ambiguous turns.
+
+    Returns ``(needs_history, needs_rewrite, search_queries, query_intent)`` where:
+    - ``needs_history`` — whether old chat memory retrieval is required.
+    - ``needs_rewrite`` — whether the raw message is too pronoun-heavy or brief
+      to be a useful standalone retrieval query (set by the router, not by a
+      word-count heuristic in the graph node).
+    - ``search_queries`` — list of 1-4 fully context-resolved phrases covering
+      different language phrasings of the topic to maximise cross-language
+      Hinglish↔English retrieval via parallel embedding searches.
+    - ``query_intent`` — temporal direction: "current" | "historical" | "neutral".
+      Controls recency boost direction in the retrieval scoring pipeline.
+
+    Falls back to ``(False, False, [], "neutral")`` on any parse error.
+    """
+    # Use last 6 turns (3 exchanges) so the classifier has enough context to
+    # resolve pronouns and topic references in short follow-up messages.
+    recent = history[-6:]
     context_lines: list[str] = []
     for turn in recent:
         label = "User" if turn.get("role") == "user" else "Persona"
@@ -150,20 +166,10 @@ def classify_history_need(
     context_block = "\n".join(context_lines) if context_lines else "(no prior turns)"
 
     # Lowercase the message before classification — ALL-CAPS queries confuse the model
-    # and may generate a poor search_query; lowercasing normalises without losing meaning.
+    # and may generate poor search queries; lowercasing normalises without losing meaning.
     normalized_message = user_message.strip().lower()
 
-    prompt = (
-        "Decide if the latest user message needs factual recall from old WhatsApp chat history.\n"
-        'Return ONLY JSON: {"needs_history": boolean, "search_query": string}\n'
-        "- needs_history=true when they ask about past events, dates, plans, what was said, "
-        "or references something from before this live chat.\n"
-        "- needs_history=false for casual chat, reactions, opinions, or continuing the current topic.\n"
-        "- search_query: short search phrase in the same language mix as the user (Hinglish/English). "
-        "Empty string when needs_history=false.\n\n"
-        f"Recent chat:\n{context_block}\n\n"
-        f"Latest user message: {normalized_message}"
-    )
+    prompt = persona_classify_history_need(context_block, normalized_message)
 
     raw = gemini_service.chat(
         [{"role": "user", "content": prompt}],
@@ -178,15 +184,36 @@ def classify_history_need(
     start = text.find("{")
     end = text.rfind("}") + 1
     if start < 0 or end <= start:
-        return False, ""
+        return False, False, [], "neutral"
 
     try:
         parsed = json.loads(text[start:end])
     except json.JSONDecodeError:
-        return False, ""
+        return False, False, [], "neutral"
 
     needs = bool(parsed.get("needs_history"))
-    query = str(parsed.get("search_query") or "").strip()
-    if needs and not query:
-        query = normalized_message
-    return needs, query
+
+    if not needs:
+        # needs_rewrite and query_intent are only meaningful when retrieval will happen.
+        return False, False, [], "neutral"
+
+    needs_rewrite = bool(parsed.get("needs_rewrite", False))
+
+    # Parse query_intent — default to "neutral" for unknown/missing values.
+    raw_intent = str(parsed.get("query_intent", "neutral")).strip().lower()
+    query_intent = raw_intent if raw_intent in ("current", "historical", "neutral") else "neutral"
+
+    # Accept either "search_queries" (new list form) or legacy "search_query" (str).
+    raw_queries = parsed.get("search_queries")
+    if isinstance(raw_queries, list):
+        queries = [str(q).strip() for q in raw_queries if str(q).strip()]
+    else:
+        # Legacy fallback: single string field
+        legacy = str(parsed.get("search_query") or "").strip()
+        queries = [legacy] if legacy else []
+
+    # Always ensure at least the normalised message is present as a fallback.
+    if not queries:
+        queries = [normalized_message]
+
+    return True, needs_rewrite, queries, query_intent

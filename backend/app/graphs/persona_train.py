@@ -1,12 +1,11 @@
-import asyncio
-import logging
-from datetime import datetime, timezone
-
 from app.core.memory import release_all_memory
 from app.services import gemini as gemini_service
 from app.services import jobs as job_service
 from app.services import vector_index as vector_service
 from app.services import workspace as workspace_service
+import asyncio
+from datetime import datetime, timezone
+import logging
 
 logger = logging.getLogger("chatmemory.persona_train")
 
@@ -48,20 +47,29 @@ async def run_persona_train_job(
                 eta_seconds=eta_seconds,
             )
 
-        progress(15, "refreshing_samples", "Refreshing sample messages")
+        progress(6, "refreshing_samples", "Refreshing sample messages")
         try:
             workspace_service.refresh_person_samples(workspace_id, person_id)
         except FileNotFoundError:
             pass
 
-        progress(40, "style_profile", "Computing style profile")
+        progress(8, "style_profile", "Computing style profile")
         await asyncio.to_thread(
             workspace_service.refresh_person_style_profile,
             workspace_id,
             person_id,
         )
 
-        progress(55, "chat_analysis", "Analysing chat patterns")
+        # All refresh_person_* steps are awaited sequentially (Option A).
+        # Each await blocks until the thread pool worker finishes before the
+        # next step starts, so they never run concurrently on the same file.
+        # The file-level lock in update_person_record (Option B) + atomic write
+        # (Option C) defend against concurrent API reads racing the writes.
+
+        # Old 4-call pipeline — generates chatAnalysis, personalityNotes,
+        # writingStyleNotes, and activeListeningStyle alongside the v2 fields.
+
+        progress(10, "chat_analysis", "Deep chat analysis (chunked)")
         try:
             await asyncio.to_thread(
                 workspace_service.refresh_person_chat_analysis,
@@ -69,10 +77,9 @@ async def run_persona_train_job(
                 person_id,
             )
         except Exception as exc:
-            # Non-fatal: persona still works without deep chat analysis.
-            logger.warning("Chat analysis extraction failed (non-fatal): %s", exc)
+            logger.warning("Chat analysis failed (non-fatal): %s", exc)
 
-        progress(65, "personality", "Extracting personality profile")
+        progress(25, "personality", "Extracting personality notes")
         try:
             await asyncio.to_thread(
                 workspace_service.refresh_person_personality,
@@ -80,10 +87,9 @@ async def run_persona_train_job(
                 person_id,
             )
         except Exception as exc:
-            # Non-fatal: persona still works without personality notes.
             logger.warning("Personality extraction failed (non-fatal): %s", exc)
 
-        progress(75, "writing_style", "Extracting writing style")
+        progress(35, "writing_style", "Extracting writing style notes")
         try:
             await asyncio.to_thread(
                 workspace_service.refresh_person_writing_style,
@@ -91,10 +97,9 @@ async def run_persona_train_job(
                 person_id,
             )
         except Exception as exc:
-            # Non-fatal: persona still works without writing style notes.
             logger.warning("Writing style extraction failed (non-fatal): %s", exc)
 
-        progress(80, "listening_style", "Extracting listening style")
+        progress(45, "listening_style", "Extracting listening style")
         try:
             await asyncio.to_thread(
                 workspace_service.refresh_person_listening_style,
@@ -103,6 +108,45 @@ async def run_persona_train_job(
             )
         except Exception as exc:
             logger.warning("Listening style extraction failed (non-fatal): %s", exc)
+
+        # v2 pipeline — generates relationshipDynamic, emotionalProfile,
+        # typingFingerprint, responsePatterns, and voiceSamples.
+
+        progress(55, "relationship_emotional", "Extracting relationship dynamic and emotional profile")
+        try:
+            await asyncio.to_thread(
+                workspace_service.refresh_person_relationship_emotional,
+                workspace_id,
+                person_id,
+            )
+        except Exception as exc:
+            logger.warning("Relationship/emotional extraction failed (non-fatal): %s", exc)
+
+        progress(65, "typing_fingerprint", "Extracting typing fingerprint")
+        try:
+            await asyncio.to_thread(
+                workspace_service.refresh_person_typing_fingerprint,
+                workspace_id,
+                person_id,
+            )
+        except Exception as exc:
+            logger.warning("Typing fingerprint extraction failed (non-fatal): %s", exc)
+
+        progress(75, "response_patterns", "Extracting response patterns and topic map")
+        try:
+            await asyncio.to_thread(
+                workspace_service.refresh_person_response_patterns,
+                workspace_id,
+                person_id,
+            )
+        except Exception as exc:
+            logger.warning("Response patterns extraction failed (non-fatal): %s", exc)
+
+        progress(85, "voice_samples", "Selecting and labelling voice sample exchanges")
+        try:
+            await workspace_service.refresh_person_voice_samples(workspace_id, person_id)
+        except Exception as exc:
+            logger.warning("Voice sample selection failed (non-fatal): %s", exc)
 
         progress(88, "activating", "Activating Gemini persona")
         model_name = gemini_service.GEMINI_MODEL_TAG

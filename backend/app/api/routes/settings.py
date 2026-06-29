@@ -1,14 +1,28 @@
-from fastapi import APIRouter
-
 from app.core.config import get_settings
 from app.core.gpu_lock import gpu_holder
 from app.core.paths import ensure_data_dirs
-from app.core.schemas import HealthResponse, SettingsResponse, SettingsUpdate
+from app.core.schemas import HealthResponse, SettingsResponse, SettingsUpdate, SystemStatusResponse
 from app.services import embed as embed_service
 from app.services import gemini as gemini_service
 from app.services.vector_index import active_vector_store_mode
+from fastapi import APIRouter
 
 router = APIRouter(tags=["system"])
+
+
+@router.get("/system/status", response_model=SystemStatusResponse)
+def system_status() -> SystemStatusResponse:
+    """Lightweight probe used by the frontend to show an embed-model loading indicator."""
+    settings = get_settings()
+    try:
+        device = embed_service.resolve_embed_device()
+    except Exception:
+        device = "unknown"
+    return SystemStatusResponse(
+        embed_ready=embed_service.embed_ready(),
+        embed_model=settings.embed_model,
+        embed_device=device,
+    )
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -70,6 +84,7 @@ def get_settings_route() -> SettingsResponse:
         active_job_id=holder,
         gemini_configured=gemini_ok,
         gemini_model=settings.gemini_model,
+        thinking_show_input=settings.thinking_show_input,
     )
 
 

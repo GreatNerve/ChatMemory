@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import json
-from functools import lru_cache
-from typing import Any
-
-from langchain_chroma import Chroma
-
 from app.core.paths import workspace_path
 from app.services.langchain_embed import get_embeddings
 from app.services.parser.whatsapp import Message, non_system_messages
+from functools import lru_cache
+import json
+from langchain_chroma import Chroma
+from typing import Any
 
 
 def _collection_name(workspace_id: str) -> str:
@@ -30,10 +28,32 @@ def _get_store(workspace_id: str) -> Chroma:
 
 
 def clear_store_cache(workspace_id: str | None = None) -> None:
-    """Drop cached LangChain Chroma handles (tests / re-ingest)."""
-    if workspace_id is None:
-        _get_store.cache_clear()
-        return
+    """Close the underlying chromadb client and drop the LangChain Chroma handle."""
+    if workspace_id is not None:
+        try:
+            store = _get_store(workspace_id)
+            # LangChain Chroma wraps a chromadb PersistentClient.
+            # On Windows the SQLite + HNSW files stay locked until the client is
+            # garbage-collected.  We reach into the private attribute chain and
+            # close the SQLite connection explicitly before evicting the cache.
+            client = getattr(store, "_client", None)
+            if client is not None:
+                # chromadb PersistentClient holds a SqliteDB under _db
+                db = getattr(client, "_db", None)
+                if db is not None:
+                    conn = getattr(db, "_conn", None)
+                    if conn is not None:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                # Also try the public delete_collection path as a best-effort flush
+                try:
+                    client.clear_system_cache()
+                except Exception:
+                    pass
+        except Exception:
+            pass
     _get_store.cache_clear()
 
 

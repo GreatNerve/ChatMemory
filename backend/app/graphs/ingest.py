@@ -1,8 +1,3 @@
-import asyncio
-import logging
-import time
-from typing import TypedDict
-
 from app.core.config import get_settings
 from app.core.gpu_lock import gpu_lock
 from app.core.memory import release_ram
@@ -13,6 +8,10 @@ from app.services import vector_index as vector_service
 from app.services import workspace as workspace_service
 from app.services.parser.preprocess import preprocess_whatsapp_export
 from app.services.parser.whatsapp import non_system_messages, parse_whatsapp_export
+import asyncio
+import logging
+import time
+from typing import TypedDict
 
 logger = logging.getLogger("chatmemory.ingest")
 

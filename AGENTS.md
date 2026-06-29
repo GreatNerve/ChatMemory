@@ -30,6 +30,8 @@ Workflow. Domain: [CONTEXT.md](./CONTEXT.md). Detail: `docs/`.
 
 | `backend/app/` | FastAPI routes, LangGraph graphs, services, core |
 
+| `backend/app/prompts/` | Centralised LLM prompt strings — one file per domain |
+
 | `frontend/src/` | Next.js App Router, brutal UI, TanStack Query, Zod |
 
 | `docs/` | All technical + design markdown (except root CONTEXT/AGENTS) |

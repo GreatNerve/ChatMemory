@@ -51,6 +51,8 @@ extend-select = ["I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+no-sections = true
+force-sort-within-sections = true
 
 [build-system]
 requires = ["hatchling"]

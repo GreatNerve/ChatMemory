@@ -82,6 +82,25 @@ export interface ChatMessage {
   content: string;
 }
 
+/** Routing + retrieval decisions captured per persona reply (for the thinking accordion). */
+export interface ChatDebugMeta {
+  route?: string | null;           // "casual" | "memory" | "ambiguous"
+  needsHistory?: boolean | null;
+  needsRewrite?: boolean | null;
+  rewrittenQuery?: string | null;  // context-resolved query used for retrieval
+  searchQueries?: string[] | null; // all queries sent to BM25/Chroma
+  blocksRetrieved?: number | null; // memory blocks injected into system prompt
+}
+
+/** One stage event emitted by the backend context/generation graph. */
+export interface StageEvent {
+  type: "stage";
+  stage: "route" | "classify" | "rewrite" | "retrieve" | "generate";
+  status: "running" | "done";
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+}
+
 export interface PersonaChatRequest {
   message: string;
   history: ChatMessage[];
@@ -130,6 +149,8 @@ export interface Settings {
   activeJobId: string | null;
   geminiConfigured?: boolean;
   geminiModel?: string;
+  /** When false (server default) the ThinkingPanel hides INPUT by default (outputOnly=true). */
+  thinkingShowInput?: boolean;
 }
 
 export interface Health {
@@ -139,6 +160,13 @@ export interface Health {
   mlStackError?: string | null;
   geminiConfigured?: boolean;
   embedReady?: boolean;
+}
+
+/** Lightweight readiness probe — returned by GET /system/status */
+export interface SystemStatus {
+  embedReady: boolean;
+  embedModel: string;
+  embedDevice: string;
 }
 
 export interface ActivityBucket {

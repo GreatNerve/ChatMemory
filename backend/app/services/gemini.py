@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import logging
-import os
+from app.core.config import get_settings
 from collections.abc import Iterator
-from typing import Any
-
 from google import genai
 from google.genai import errors as genai_errors
-
-from app.core.config import get_settings
+import logging
+import os
+from typing import Any
 
 logger = logging.getLogger("chatmemory.gemini")
 

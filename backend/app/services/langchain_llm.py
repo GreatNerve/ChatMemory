@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
-
+from app.services import gemini as gemini_service
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-
-from app.services import gemini as gemini_service
+from typing import Any
 
 
 def _to_gemini_messages(messages: list[BaseMessage]) -> list[dict[str, str]]:

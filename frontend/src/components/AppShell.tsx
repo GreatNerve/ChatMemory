@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
+import { useSystemStatusQuery } from "@/react-query/queries/useWorkspacesQuery";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -34,12 +35,44 @@ function NavLink({
   );
 }
 
+/** Thin status bar shown at the very top while the embed model is still loading. */
+function EmbedLoadingBar({ model, device }: { model: string; device: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-2 border-b-2 border-[var(--cm-accent)] bg-[var(--cm-surface)] px-4 py-1.5"
+    >
+      {/* Animated pulse dot */}
+      <span className="relative flex h-2 w-2 shrink-0">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--cm-accent)] opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--cm-accent)]" />
+      </span>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-[var(--cm-accent)]">
+        Embedding model loading
+      </p>
+      <span className="font-mono text-[11px] text-[var(--cm-text-muted)]">
+        {model}
+        {device && device !== "unknown" ? ` · ${device}` : ""}
+        {" — Ask and persona chat will be available shortly"}
+      </span>
+    </div>
+  );
+}
+
 export function AppShell({ children, workspaceId, workspaceName }: AppShellProps) {
   const pathname = usePathname();
   const base = workspaceId ? `/workspace/${workspaceId}` : "";
+  const { data: sysStatus } = useSystemStatusQuery();
+
+  // Show bar only when we have a confirmed not-ready signal (avoids flash on initial load).
+  const showEmbedBar = sysStatus !== undefined && !sysStatus.embedReady;
 
   return (
     <div className="flex min-h-screen flex-col">
+      {showEmbedBar ? (
+        <EmbedLoadingBar model={sysStatus.embedModel} device={sysStatus.embedDevice} />
+      ) : null}
       <header className="flex items-center justify-between border-b-2 border-[var(--cm-border)] bg-[var(--cm-surface)] px-4 py-3">
         <div className="flex items-center gap-4">
           <Link

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from langchain_core.embeddings import Embeddings
-
 from app.services import embed as embed_service
+from langchain_core.embeddings import Embeddings
 
 
 class ChatMemoryEmbeddings(Embeddings):

@@ -1,8 +1,7 @@
+from app.core.memory import release_ram
 import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
-
-from app.core.memory import release_ram
 
 _lock = asyncio.Lock()
 _holder: str | None = None

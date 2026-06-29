@@ -1,6 +1,5 @@
-from pathlib import Path
-
 from app.core.config import get_settings
+from pathlib import Path
 
 
 def ensure_data_dirs() -> None:

@@ -1,12 +1,10 @@
-import asyncio
-import json
-from typing import AsyncIterator
-
-from fastapi import APIRouter, HTTPException
-from sse_starlette.sse import EventSourceResponse
-
 from app.core.schemas import JobSnapshot
 from app.services import jobs as job_service
+import asyncio
+from fastapi import APIRouter, HTTPException
+import json
+from sse_starlette.sse import EventSourceResponse
+from typing import AsyncIterator
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 

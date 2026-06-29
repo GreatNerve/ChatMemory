@@ -24,14 +24,49 @@ def test_rewrite_query_uses_langchain(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     get_settings.cache_clear()
 
+    # LLM returns three newline-separated query variants
+    with patch(
+        "app.services.rag_chain.get_chat_model",
+        return_value=_mock_llm_response(
+            "Goa trip kab plan hua\nWhen was Goa trip planned\nGoa trip planning date"
+        ),
+    ) as get_model:
+        queries = rag_chain.rewrite_query("When was Goa trip planned?")
+
+    assert queries == [
+        "Goa trip kab plan hua",
+        "When was Goa trip planned",
+        "Goa trip planning date",
+    ]
+    get_model.assert_called_once_with(temperature=0.2)
+
+
+def test_rewrite_query_single_line_fallback(monkeypatch):
+    """Single-line LLM response still returns a one-element list."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    get_settings.cache_clear()
+
     with patch(
         "app.services.rag_chain.get_chat_model",
         return_value=_mock_llm_response("Goa trip kab plan hua"),
-    ) as get_model:
-        text = rag_chain.rewrite_query("When was Goa trip planned?")
+    ):
+        queries = rag_chain.rewrite_query("Goa trip kab hua?")
 
-    assert text == "Goa trip kab plan hua"
-    get_model.assert_called_once_with(temperature=0.2)
+    assert queries == ["Goa trip kab plan hua"]
+
+
+def test_rewrite_query_empty_response_falls_back_to_question(monkeypatch):
+    """Empty LLM response returns the original question as sole query."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    get_settings.cache_clear()
+
+    with patch(
+        "app.services.rag_chain.get_chat_model",
+        return_value=_mock_llm_response("   \n  \n"),
+    ):
+        queries = rag_chain.rewrite_query("Some question?")
+
+    assert queries == ["Some question?"]
 
 
 def test_grounded_answer_uses_langchain(monkeypatch):

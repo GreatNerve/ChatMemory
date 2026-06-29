@@ -45,7 +45,6 @@ export function PersonDetailPage({
   const [lastInteractionId, setLastInteractionId] = useState<string | null>(null);
   const [conversationSummary, setConversationSummary] = useState<string | null>(null);
   const [summarizeError, setSummarizeError] = useState<string | null>(null);
-  const [chatFullscreen, setChatFullscreen] = useState(false);
   const chatAbortRef = useRef<AbortController | null>(null);
 
   const activeJobId = trainJobId ?? person?.lastTrainJobId ?? null;
@@ -251,9 +250,6 @@ export function PersonDetailPage({
 
         <BrutalPanel>
           <p className="mb-3 font-mono text-xs uppercase tracking-widest">Activate persona</p>
-          <p className="mb-3 text-xs text-[var(--cm-text-muted)]">
-            Fast build via Google Gemini — refreshes samples and style profile (no GPU training)
-          </p>
           {person.trainWarning ? (
             <p
               className={`mb-3 text-sm ${
@@ -353,9 +349,8 @@ export function PersonDetailPage({
             chatInput={chatInput}
             onChatInputChange={setChatInput}
             onSubmit={onChat}
-            isFullscreen={chatFullscreen}
-            onToggleFullscreen={() => setChatFullscreen((v) => !v)}
             hasConversationSummary={Boolean(conversationSummary)}
+            fullscreenUrl={`/workspace/${workspaceId}/people/${personId}/chat`}
           />
         ) : null}
       </div>

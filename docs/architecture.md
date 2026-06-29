@@ -51,6 +51,7 @@ ChatMemory/
 │       ├── main.py
 │       ├── api/routes/
 │       ├── graphs/            # ingest, qa, persona_train, persona_chat
+│       ├── prompts/           # centralised LLM prompt strings (qa, persona_build, persona_chat, routing, validation)
 │       ├── services/          # parser, chroma, embed, gemini, rag_chain, jobs, analytics
 │       └── core/              # config, gpu_lock, schemas
 ├── frontend/
@@ -77,6 +78,18 @@ ChatMemory/
 | `persona_chat` | POST chat / chat/stream | Sync (seconds) |
 
 Persona **summarize** remains a direct route on the `persona_chat` service (no graph).
+
+### Prompts (`backend/app/prompts/`)
+
+Centralised LLM prompt strings — no inline prompt text in services or graphs. See [prompts.md](./prompts.md) for the full function reference.
+
+| Module | Domain |
+|--------|--------|
+| `qa.py` | Q&A rewrite, rerank, grounded answer |
+| `persona_build.py` | Personality, writing style, chat analysis, listening style extraction |
+| `persona_chat.py` | System prompt assembly, conversation summarization |
+| `routing.py` | History-router Gemini classify |
+| `validation.py` | Hallucination validate + safe-regeneration note |
 
 ### Services (`backend/app/services/`)
 

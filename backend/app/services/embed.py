@@ -1,10 +1,9 @@
+from app.core.config import get_settings
+from app.core.memory import prepare_vram_for_large_model, release_cuda_memory, release_ram
+from functools import lru_cache
 import logging
 import math
 import os
-from functools import lru_cache
-
-from app.core.config import get_settings
-from app.core.memory import prepare_vram_for_large_model, release_cuda_memory, release_ram
 
 logger = logging.getLogger("chatmemory.embed")
 
@@ -138,8 +137,8 @@ def _ensure_local_model() -> None:
     if _local_model is not None:
         return
 
-    import torch
     from sentence_transformers import SentenceTransformer
+    import torch
 
     settings = get_settings()
     device = resolve_embed_device()

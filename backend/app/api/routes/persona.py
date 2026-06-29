@@ -1,8 +1,3 @@
-import asyncio
-
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-
 from app.core.config import get_settings
 from app.core.paths import person_path
 from app.core.schemas import (
@@ -12,10 +7,14 @@ from app.core.schemas import (
     PersonaSummarizeResponse,
     TrainRequest,
 )
+from app.services import embed as embed_service
 from app.services import gemini as gemini_service
 from app.services import jobs as job_service
 from app.services import persona_chat as persona_chat_service
 from app.services import workspace as workspace_service
+import asyncio
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/people/{person_id}", tags=["persona"])
 
@@ -121,6 +120,12 @@ def _chat_history(body: PersonaChatRequest) -> list[dict[str, str]]:
 def persona_chat(
     workspace_id: str, person_id: str, body: PersonaChatRequest
 ) -> PersonaChatResponse:
+    if not embed_service.embed_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding model is still loading — please try again in a moment.",
+        )
+
     try:
         person = workspace_service.get_person(workspace_id, person_id)
     except FileNotFoundError as exc:
@@ -135,7 +140,7 @@ def persona_chat(
 
     history = _chat_history(body)
     try:
-        reply, interaction_id = persona_chat_service.reply(
+        reply, interaction_id, debug_meta = persona_chat_service.reply(
             workspace_id,
             person,
             history,
@@ -154,6 +159,7 @@ def persona_chat(
         reply=reply,
         model=get_settings().gemini_model,
         interaction_id=interaction_id,
+        debug_meta=debug_meta,
     )
 
 
@@ -161,6 +167,12 @@ def persona_chat(
 def persona_chat_stream(
     workspace_id: str, person_id: str, body: PersonaChatRequest
 ) -> StreamingResponse:
+    if not embed_service.embed_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding model is still loading — please try again in a moment.",
+        )
+
     try:
         person = workspace_service.get_person(workspace_id, person_id)
     except FileNotFoundError as exc:

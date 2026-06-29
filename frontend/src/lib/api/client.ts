@@ -73,10 +73,11 @@ export async function apiDelete(path: string): Promise<void> {
 
 export type PersonaStreamEvent =
   | { token: string }
-  | { done: true; interactionId?: string }
+  | { done: true; interactionId?: string; debugMeta?: import("./types").ChatDebugMeta }
   | { status: "thinking" }
   | { msg_break: true }
-  | { error: string };
+  | { error: string }
+  | import("./types").StageEvent;
 
 /** Stream persona chat tokens via SSE (POST + readable stream). */
 export async function streamPersonaChat(

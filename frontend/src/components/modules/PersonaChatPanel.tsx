@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import Link from "next/link";
 import { BrutalButton } from "@/components/brutal/BrutalButton";
 import { BrutalInput } from "@/components/brutal/BrutalInput";
 import { BrutalPanel } from "@/components/brutal/BrutalPanel";
@@ -19,9 +19,9 @@ interface PersonaChatPanelProps {
   chatInput: string;
   onChatInputChange: (value: string) => void;
   onSubmit: (e: FormEvent) => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
   hasConversationSummary?: boolean;
+  /** If provided, shows an "open full screen" icon button that opens this URL in a new tab. */
+  fullscreenUrl?: string;
 }
 
 function UserBubble({ content }: { content: string }) {
@@ -139,12 +139,14 @@ export function PersonaChatPanel({
   chatInput,
   onChatInputChange,
   onSubmit,
-  isFullscreen,
-  onToggleFullscreen,
   hasConversationSummary = false,
+  fullscreenUrl,
 }: PersonaChatPanelProps) {
   const messagesRef = useRef<HTMLDivElement>(null);
-  const fullscreenMessagesRef = useRef<HTMLDivElement>(null);
+  // Ref on the chat input so we can restore focus after each response.
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Track previous chatLoading to detect the loading→idle transition.
+  const prevChatLoadingRef = useRef(chatLoading);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
@@ -170,6 +172,19 @@ export function PersonaChatPanel({
 
   const headerActions = (
     <div className="flex flex-wrap items-center gap-2">
+      {/* Fullscreen link — opens the dedicated chat page in a new tab */}
+      {fullscreenUrl ? (
+        <Link
+          href={fullscreenUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open full screen"
+          aria-label="Open full screen chat"
+          className="inline-flex h-8 w-8 items-center justify-center border-2 border-(--cm-border) bg-(--cm-surface) font-mono text-sm text-(--cm-text) transition-colors hover:bg-(--cm-surface-raised) active:translate-y-px"
+        >
+          ↗
+        </Link>
+      ) : null}
       <BrutalButton
         type="button"
         variant="ghost"
@@ -178,14 +193,6 @@ export function PersonaChatPanel({
         aria-label="Download chat as PDF"
       >
         {pdfLoading ? "Generating…" : "Download PDF"}
-      </BrutalButton>
-      <BrutalButton
-        type="button"
-        variant="ghost"
-        onClick={onToggleFullscreen}
-        aria-label={isFullscreen ? "Exit fullscreen chat" : "Open fullscreen chat"}
-      >
-        {isFullscreen ? "Exit" : "Fullscreen"}
       </BrutalButton>
     </div>
   );
@@ -211,27 +218,24 @@ export function PersonaChatPanel({
   );
 
   useEffect(() => {
-    const el = isFullscreen ? fullscreenMessagesRef.current : messagesRef.current;
+    const el = messagesRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [history, streamingBursts, chatLoading, isFullscreen]);
+  }, [history, streamingBursts, chatLoading]);
 
+  // Re-focus the input whenever chatLoading transitions from true → false.
+  // This covers both the success path (stream done) and the error path.
   useEffect(() => {
-    if (!isFullscreen) return;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onToggleFullscreen();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [isFullscreen, onToggleFullscreen]);
+    if (prevChatLoadingRef.current && !chatLoading) {
+      inputRef.current?.focus();
+    }
+    prevChatLoadingRef.current = chatLoading;
+  }, [chatLoading]);
 
   const inputForm = (
     <form onSubmit={onSubmit} className="flex gap-2">
       <BrutalInput
+        ref={inputRef}
         value={chatInput}
         onChange={(e) => onChatInputChange(e.target.value)}
         placeholder="Message…"
@@ -247,86 +251,22 @@ export function PersonaChatPanel({
     <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--cm-error)]">{chatError}</p>
   ) : null;
 
-  const fullscreenOverlay =
-    isFullscreen && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className="fixed inset-0 z-50 flex flex-col gap-4 border-4 border-[var(--cm-border)] bg-[var(--cm-bg)] p-4 sm:p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Chat with ${displayName}`}
-          >
-            <div className="flex items-center gap-3 border-b-2 border-[var(--cm-border-muted)] pb-3">
-              <h2 className="font-mono text-lg font-bold uppercase">{displayName}</h2>
-              <span className="font-mono text-[10px] uppercase text-[var(--cm-text-muted)]">
-                · persona chat · Esc to exit
-              </span>
-              {hasConversationSummary ? (
-                <span className="font-mono text-[10px] uppercase text-[var(--cm-text-muted)]">
-                  · earlier summarized
-                </span>
-              ) : null}
-              <div className="ml-auto flex flex-wrap gap-2">
-                <BrutalButton
-                  type="button"
-                  variant="ghost"
-                  onClick={onDownloadPdf}
-                  disabled={!canDownloadPdf}
-                >
-                  {pdfLoading ? "Generating…" : "Download PDF"}
-                </BrutalButton>
-              </div>
-            </div>
-            <div
-              ref={fullscreenMessagesRef}
-              className="flex flex-1 flex-col gap-3 overflow-y-auto border-2 border-[var(--cm-border-muted)] p-4"
-            >
-              <ChatMessages
-                displayName={displayName}
-                history={history}
-                streamingBursts={streamingBursts}
-                chatLoading={chatLoading}
-              />
-            </div>
-            {inputForm}
-            {errorBlock}
-            <div className="flex justify-end">
-              <BrutalButton type="button" variant="ghost" onClick={onToggleFullscreen}>
-                Exit fullscreen
-              </BrutalButton>
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
-
   return (
-    <>
-      <BrutalPanel className={isFullscreen ? "opacity-50" : undefined}>
-        {header}
-        <div
-          ref={messagesRef}
-          className="mb-4 mt-3 flex max-h-80 flex-col gap-3 overflow-y-auto border-2 border-[var(--cm-border-muted)] p-3"
-        >
-          <ChatMessages
-            displayName={displayName}
-            history={history}
-            streamingBursts={streamingBursts}
-            chatLoading={chatLoading}
-          />
-        </div>
-        {!isFullscreen ? (
-          <>
-            {inputForm}
-            {errorBlock}
-          </>
-        ) : (
-          <p className="text-xs text-[var(--cm-text-muted)]">
-            Chat open in fullscreen — press Esc or click Exit
-          </p>
-        )}
-      </BrutalPanel>
-      {fullscreenOverlay}
-    </>
+    <BrutalPanel>
+      {header}
+      <div
+        ref={messagesRef}
+        className="mb-4 mt-3 flex max-h-80 flex-col gap-3 overflow-y-auto border-2 border-[var(--cm-border-muted)] p-3"
+      >
+        <ChatMessages
+          displayName={displayName}
+          history={history}
+          streamingBursts={streamingBursts}
+          chatLoading={chatLoading}
+        />
+      </div>
+      {inputForm}
+      {errorBlock}
+    </BrutalPanel>
   );
 }

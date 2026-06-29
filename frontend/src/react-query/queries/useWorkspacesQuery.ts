@@ -5,6 +5,7 @@ import {
   PersonDetail,
   PersonSummary,
   Settings,
+  SystemStatus,
   WorkspaceAnalytics,
   WorkspaceDetail,
   WorkspaceSummary,
@@ -55,6 +56,24 @@ export function useHealthQuery() {
     queryKey: ["health"],
     queryFn: () => apiGet<Health>("/health"),
     refetchInterval: 15_000,
+  });
+}
+
+/**
+ * Poll GET /system/status every 3 s until the embed model is ready, then
+ * slow down to once a minute (the model stays warm after first load).
+ */
+export function useSystemStatusQuery() {
+  return useQuery({
+    queryKey: ["system-status"],
+    queryFn: () => apiGet<SystemStatus>("/system/status"),
+    // Fast poll while loading; slow down once ready to reduce noise.
+    refetchInterval: (query) => {
+      const ready = query.state.data?.embedReady;
+      return ready ? 60_000 : 3_000;
+    },
+    // Keep stale data visible while revalidating so the UI never flickers.
+    staleTime: 2_000,
   });
 }
 

@@ -1,6 +1,5 @@
 from functools import lru_cache
 from pathlib import Path
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -31,24 +30,48 @@ class Settings(BaseSettings):
     qa_bm25_top_k: int = 20
     qa_rerank_top_k: int = 8
     qa_grade_threshold: float = 0.6
+    # Lower threshold used when 2+ query variants are generated (cross-language path).
+    # A chunk found by multiple phrasings is likely relevant even if individual scores
+    # fall below the standard 0.6 cutoff.
+    qa_multi_query_grade_threshold: float = 0.45
     qa_min_passing_chunks: int = 2
+    # Context window expansion for Q&A: how many messages to include before/after each matched hit.
+    # More messages after than before — the answer typically follows the question in chat.
+    qa_context_window_before: int = 3
+    qa_context_window_after: int = 4
 
     persona_retrieve_top_k: int = 8
     persona_retrieve_weak_threshold: float = 0.32
     persona_retrieve_min_strong_hits: int = 2
     persona_retrieve_strong_score: float = 0.25
     persona_memory_window_before: int = 3
-    persona_memory_window_after: int = 2
+    # Bumped from 2 → 4 so Q&A replies that follow the hit are captured.
+    persona_memory_window_after: int = 4
     persona_memory_max_blocks: int = 5
     # Minimum cosine similarity score a retrieved hit must reach before its memory
     # block is injected into the persona system prompt.  Hits below this threshold
     # are discarded entirely so weakly-related context never reaches the model.
     persona_memory_inject_min_score: float = 0.35
+    # Lower gate used when retrieval runs in multi-query / cross-language mode
+    # (i.e. the classify step returned 2+ search queries covering Hinglish and
+    # English phrasings).  Cross-language embedding similarity is structurally
+    # lower even for semantically identical content, so a tighter threshold would
+    # silently discard valid matches like "intern lag gayi" ↔ "interning at EY".
+    # Hits that appear in 2+ query result sets get an additional discount (×0.65)
+    # on top of this threshold to reward multi-signal corroboration.
+    persona_memory_inject_min_score_cross_lang: float = 0.22
 
     embed_batch_size: int = 32
     embed_device: str = "auto"  # auto | cuda | cpu
 
     min_workspace_messages: int = 50
+
+    # When False the frontend defaults to output-only mode in the ThinkingPanel
+    # (INPUT section hidden); user can still toggle locally via the UI button.
+    thinking_show_input: bool = False
+
+    # Hugging Face token — forwarded to os.environ so transformers picks it up
+    hf_token: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

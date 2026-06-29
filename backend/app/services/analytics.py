@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import json
-import re
-import statistics
-from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
-
 from app.core.paths import workspace_path
 from app.services.parser.preprocess import preprocess_whatsapp_export
 from app.services.parser.whatsapp import Message, non_system_messages, parse_whatsapp_export
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import json
+import re
+import statistics
+from typing import Any
 
 # A new conversation *session* begins when consecutive turns are separated by
 # more than this many seconds.  Within a session, replies are "burst" replies.

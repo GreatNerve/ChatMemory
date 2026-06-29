@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException
-
 from app.core.paths import workspace_path
 from app.core.schemas import PersonDetail
 from app.services import workspace as workspace_service
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/people", tags=["people"])
 

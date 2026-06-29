@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import json
-import logging
-from functools import lru_cache
-from typing import Any
-
 from app.core.config import get_settings
 from app.core.paths import workspace_path
 from app.services.embed import _cosine_similarity, normalize_vector
 from app.services.parser.whatsapp import Message, non_system_messages
+from functools import lru_cache
+import json
+import logging
+from typing import Any
 
 logger = logging.getLogger("chatmemory.vector")
 

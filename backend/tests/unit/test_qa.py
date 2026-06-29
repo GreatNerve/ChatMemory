@@ -30,8 +30,8 @@ def mock_retrieval(monkeypatch):
     """Stub retrieval so tests only exercise LangChain answer routing."""
 
     def _rewrite(q):
-
-        return q
+        # rewrite_query now returns list[str]; return a single-item list
+        return [q]
 
     def _rerank(q, chunks, top_k):
 
