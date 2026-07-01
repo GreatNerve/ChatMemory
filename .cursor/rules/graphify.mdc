@@ -1,0 +1,53 @@
+---
+description: Use graphify for codebase architecture navigation and flow tracing
+alwaysApply: true
+---
+
+# Knowledge graph (graphify)
+
+Use **graphify** when exploring architecture, tracing persona chat / retrieval / training flows, or finding how modules connect — instead of broad grep across the monorepo.
+
+## Fast path
+
+If `graphify-out/graph.json` exists at repo root:
+
+```bash
+graphify query "How does persona chat retrieval work?"
+graphify path "persona_chat" "retrieval"
+graphify explain "fast_retrieve"
+```
+
+Skip full rebuild and skip repo-wide grep when the graph answers the question.
+
+## When to use
+
+| Task | Prefer graphify |
+|------|-----------------|
+| Trace persona chat context → generation | `graphify query "persona chat flow"` |
+| Find callers of a service | `graphify path "<module>" "<target>"` |
+| Understand LangGraph node wiring | `graphify query "persona_chat graph nodes"` |
+| Map retrieval scoring pipeline | `graphify query "fast_retrieve recency density"` |
+| Persona train job steps | `graphify query "persona_train pipeline steps"` |
+
+Still read `CONTEXT.md`, `docs/architecture.md`, and `docs/langgraph/persona-chat.md` for locked decisions — graphify supplements, not replaces, domain docs.
+
+## Rebuild
+
+From repo root (requires graphify installed — see [docs/graphify.md](../../docs/graphify.md)):
+
+```bash
+/graphify .
+# or: graphify detect . && graphify build . --no-viz   # lighter, no HTML
+```
+
+Respect **`.graphifyignore`** at repo root — it limits the corpus to product code and docs (excludes `data/`, `node_modules/`, build output, lockfiles, etc.). See [docs/graphify.md](../../docs/graphify.md#corpus-exclusions-graphifyignore).
+
+Output goes to `graphify-out/` (gitignored). **Never commit** `graphify-out/` or `*.graphify_*`.
+
+## Key flows to query
+
+- **Persona chat:** `backend/app/graphs/persona_chat.py` — fast_route → classify → maybe_rewrite_query → retrieve → generate → validate
+- **Retrieval:** `backend/app/services/retrieval.py` — merge → recency (`query_intent`) → density → score gate
+- **Persona train:** `backend/app/graphs/persona_train.py` — samples → style profile → Gemini extraction steps → activate
+
+Full graphify skill: Cursor `/graphify` or the graphify skill reference for detect, build, query, path, explain.
