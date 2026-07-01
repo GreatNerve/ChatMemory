@@ -98,7 +98,7 @@ flowchart TD
 
     subgraph stream["SSE stream + thinking panel"]
         ST[stage events: route · classify · rewrite · retrieve · generate]
-        RP[reply tokens + optional || burst split]
+        RP[reply tokens + optional burst split]
     end
 
     UM --> FR
