@@ -1,0 +1,77 @@
+# Graphify corpus exclusions for ChatMemory (gitignore syntax).
+# Narrows scans to product code + docs — not runtime data or build noise.
+# See docs/graphify.md
+
+# Runtime workspace data (WhatsApp exports, Chroma, jobs) — never index
+data/
+data/**
+
+# Dependencies
+node_modules/
+**/node_modules/**
+.pnpm-store/
+
+# Python env / caches
+__pycache__/
+**/__pycache__/**
+*.py[cod]
+**/*.pyc
+.venv/
+**/.venv/**
+.uv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend / backend build output
+.next/
+**/.next/**
+out/
+dist/
+**/dist/**
+build/
+**/build/**
+
+# Graphify own output (also hard-skipped by graphify)
+graphify-out/
+graphify-out/**
+
+# VCS / IDE / OS noise
+.git/
+**/.git/**
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Env / secrets (graphify also applies sensitive-file heuristics)
+.env
+.env.local
+.env.*.local
+
+# Local-only paths
+no-push/
+.agents/
+skills-lock.json
+
+# Model / HF caches
+.cache/
+models/
+
+# Logs
+*.log
+
+# Lock files — large, low signal for architecture graph
+uv.lock
+**/uv.lock
+pnpm-lock.yaml
+frontend/pnpm-lock.yaml
+
+# Minified / generated bundles
+*.min.js
+**/*.min.js
+
+# Cursor agent terminals (local session logs)
+terminals/
+**/terminals/**

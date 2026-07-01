@@ -132,6 +132,14 @@ One question → recommend → record in `CONTEXT.md` grill table + `docs/decisi
 
 
 
+## Knowledge graph
+
+Local codebase graph via [graphify](https://pypi.org/project/graphifyy/) — output in `graphify-out/` (**gitignored**).
+
+- **Rule:** [.cursor/rules/graphify.mdc](./.cursor/rules/graphify.mdc) — when to query vs grep, fast path, rebuild
+- **Setup:** [docs/graphify.md](./docs/graphify.md) — install, `/graphify .`, commands
+- **Fast path:** if `graphify-out/graph.json` exists → `graphify query "<question>"` before broad search
+
 ## LangGraph graphs
 
 | Graph | File | Doc |

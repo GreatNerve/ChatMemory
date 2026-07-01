@@ -31,6 +31,11 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Cursor IDE (local state; shared rules under .cursor/rules/ stay committable)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+
 # Model caches (Hugging Face, etc.)
 .cache/
 models/
@@ -45,3 +50,8 @@ no-push/
 # Cursor agent skills (local only)
 .agents/
 skills-lock.json
+
+# Graphify knowledge graph (local build output)
+graphify-out/
+graphify-out/**
+*.graphify_*

@@ -11,6 +11,7 @@ Start here after [CONTEXT.md](../CONTEXT.md) and [AGENTS.md](../AGENTS.md).
 | [ui-design.md](./ui-design.md) | Neo-brutalism dark design system |
 | [data-layout.md](./data-layout.md) | `./data/` on-disk schema |
 | [decisions.md](./decisions.md) | ADR log from product grill |
+| [graphify.md](./graphify.md) | Codebase knowledge graph (graphify) |
 
 ### LangGraph
 
